@@ -1,8 +1,8 @@
 # Pong-OCWM
 
-## Repository Structure
+## Repository Overview
 
-- **`env/`** — 
-- **`eval/`** — 
-- **`models/`** — 
-- **`render/`** — 
+- **`env`** — 
+- **`eval`** — 
+- **`models`** — 
+- **`render`** — 
