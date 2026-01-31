@@ -80,11 +80,11 @@ def _draw_digit(img, x, y, digit, digit_scale, color, digit_patterns):
                    dh * digit_scale,
                    color)
 
-def _downsample(img, crop_size: int, supersample: int):
+def _downsample(img, crop_size: int, upscale_factor: int):
     """Box-downsample high-res buffer to output size."""
-    if supersample == 1:
+    if upscale_factor == 1:
         return np.clip(np.round(img), 0, 255).astype(np.uint8)
-    img = img.reshape(crop_size, supersample, crop_size, supersample, 3).mean(axis=(1, 3))
+    img = img.reshape(crop_size, upscale_factor, crop_size, upscale_factor, 3).mean(axis=(1, 3))
     return np.clip(np.round(img), 0, 255).astype(np.uint8)
 
 # ----- Renderer Class -----
@@ -110,11 +110,11 @@ class Renderer:
     def clear_cache(self):
         self._buffer_cache.clear()
 
-    def render_crops(self, state, prev_state, crop_size: int = 20, supersample: int = 4):
+    def render_crops(self, state, prev_state, crop_size: int = 20, upscale_factor: int = 4):
         """Return (left_paddle, right_paddle, ball, score) crops as uint8 images."""
-        buffer_size = crop_size * supersample
+        buffer_size = crop_size * upscale_factor
         center = buffer_size / 2.0
-        scale = self.settings["resolution_scale"] * supersample
+        scale = self.settings["resolution_scale"] * upscale_factor
 
         digit_patterns = self.display_settings["digit_patterns"]
         colors = self.display_settings["colors"]
@@ -160,10 +160,10 @@ class Renderer:
         _draw_digit(score_buffer, center + 1.5 * digit_scale, center - 2.5 * digit_scale,
                     int(state["score_right"]), digit_scale, colors["score"], digit_patterns)
 
-        return (_downsample(left_buffer, crop_size, supersample),
-                _downsample(right_buffer, crop_size, supersample),
-                _downsample(ball_buffer, crop_size, supersample),
-                _downsample(score_buffer, crop_size, supersample))
+        return (_downsample(left_buffer, crop_size, upscale_factor),
+                _downsample(right_buffer, crop_size, upscale_factor),
+                _downsample(ball_buffer, crop_size, upscale_factor),
+                _downsample(score_buffer, crop_size, upscale_factor))
 
     def reconstruct_frame(self, crops, state):
         """Composite crop images into a full frame."""
