@@ -37,5 +37,7 @@ def create_animation(frames, fps: int = 24, figure_scale: int = 5):
 
     interval_ms = int(round(1000 / fps))
     anim = FuncAnimation(fig, update, frames=len(frames), interval=interval_ms, blit=True)
-
+    plt.close(fig)
+    
     return anim
+
