@@ -1,7 +1,6 @@
 import numpy as np
 
 def create_settings():
-
     settings = {
         "resolution": 64,            # Pixel side-length of game
         "resolution_scale": 1.0,     # Scaling factor to upsample renders without changing physics
@@ -21,7 +20,7 @@ def create_settings():
         "ai_decay": 0.95,            # AR(1) decay factor (higher = more persistent bias)
         "ai_bias_noise": 1.75,       # sigma for AR(1) noise shocks
         "prob_rand_action": 0.05,    # per-step probability of completely random action
-        "ai_dead_zone": 2.0,         # don't move if within this distance of perceived ball (prevents oscillations)
+        "ai_dead_zone": 2.0,         # don't move paddle if within this distance of perceived ball (prevents oscillations)
     }
     
     settings["paddle_left_x"] = 3 + settings["border_size"]
@@ -51,7 +50,7 @@ def create_settings():
 
 
 class Pong:
-    actions = {-1: "down", 0: "still", 1: "up"}
+    ACTIONS = {-1: "down", 0: "still", 1: "up"}     
 
     def __init__(self, settings=None):
         self.settings = create_settings() if settings is None else settings
@@ -264,3 +263,4 @@ class Pong:
         info["right_action"] = right_action
         
         return new_state, info
+
