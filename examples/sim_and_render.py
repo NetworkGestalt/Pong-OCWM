@@ -17,11 +17,12 @@ if __name__ == "__main__":
         left, right, ball, score = renderer.render_crops(state=state,
                                                          prev_state=env.prev_state,
                                                          crop_size=20,
-                                                         supersample=8)
+                                                         upscale_factor=4)
+        
         object_crops.append(merge_crops([left, right, ball, score]))
         full_frame = renderer.reconstruct_frame(crops=(left, right, ball, score), state=state)
         full_frames.append(full_frame)
 
     anim = create_animation(full_frames)
-
     anim.save("output.gif", writer="pillow", fps=24)     # requires Pillow package
+
