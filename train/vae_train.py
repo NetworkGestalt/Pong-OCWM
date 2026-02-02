@@ -6,10 +6,13 @@ from pong_env import Pong
 from render import Renderer
 from vae_model import ObjectVAE
 
-def vae_data_loader(env, renderer, batch_size, crop_size: int = 20, upscale_factor: int = 4, with_pos: bool = True):
+def vae_data_loader(env, 
+                    renderer, 
+                    batch_size, 
+                    crop_size: int = 20, 
+                    upscale_factor: int = 4):
     """Generate random Pong frames and extract object crops."""
     all_crops = []
-    all_positions = [] if with_pos else None
     
     for _ in range(batch_size):
         env.reset(seed=np.random.randint(1_000_000))
@@ -26,18 +29,10 @@ def vae_data_loader(env, renderer, batch_size, crop_size: int = 20, upscale_fact
         crops = crops.astype(np.float32) / 255.0
         all_crops.append(crops)
 
-        if with_pos:
-            positions = np.array([[env.settings["paddle_left_x"], state["paddle_left_y"]],
-                                [env.settings["paddle_right_x"], state["paddle_right_y"]],
-                                [state["ball_x"], state["ball_y"]],
-                                [env.settings["score_center"][0], env.settings["score_center"][1]]], dtype=np.float32)
-            all_positions.append(positions)
-    
-    crops = np.stack(all_crops, axis=0)            # (B, K, H, W, 3)
-    crops = np.transpose(crops, (0, 1, 4, 2, 3))   # (B, K, 3, H, W)
-    positions = np.stack(all_positions, axis=0) if with_pos else None
+    crops = np.stack(all_crops, axis=0)             # (B, K, H, W, 3)
+    crops = np.transpose(crops, (0, 1, 4, 2, 3))    # (B, K, 3, H, W)
 
-    return crops, positions
+    return crops
     
 
 # ----- Loss Function -----
@@ -86,8 +81,7 @@ def train_vae(num_steps=300, batch_size=64, latent_dim=32, crop_size=20, upscale
         crops, _ = vae_data_loader(env, renderer,
                                    batch_size=batch_size, 
                                    crop_size=crop_size, 
-                                   upscale_factor=upscale_factor,
-                                   with_pos=False)
+                                   upscale_factor=upscale_factor)
         
         B, K, C, H, W = crops.shape
         crops_flat = torch.from_numpy(crops).reshape(B*K, C, H, W).to(device)
