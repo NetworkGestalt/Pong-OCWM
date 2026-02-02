@@ -160,7 +160,7 @@ class Pong:
                 state[key] = self._hard_limit(state[key], self.settings[key + "_min"], self.settings[key + "_max"])
         return state
 
-    def _next_step_dynamics(self, prev_state, left_action, right_action):
+    def _update_dynamics(self, prev_state, left_action, right_action):
         """Compute the next environment state from the previous state and paddle actions."""
         new_state = {}
         info = {}
@@ -256,11 +256,12 @@ class Pong:
                                                                    self.state["ball_y"], self.ai_bias_right)
         self.t += 1
         self.prev_state = self.state
-        new_state, info = self._next_step_dynamics(self.state, left_action, right_action)
+        new_state, info = self._update_dynamics(self.state, left_action, right_action)
         self.state = new_state
 
         info["left_action"] = left_action
         info["right_action"] = right_action
         
         return new_state, info
+
 
