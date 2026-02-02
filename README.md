@@ -3,7 +3,7 @@
 ## Repository Overview
 
 - **env/**
-  - `pong.py`:
+  - `pong_env.py`:
 - **render/**
   - `render.py`:
   - `animate.py`: 
