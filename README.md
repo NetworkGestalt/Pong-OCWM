@@ -1,7 +1,8 @@
-# Pong-OCWM
+## Pong-OCWM
 
-## Repository Overview
+### Description
 
+### Repository Contents
 - **env/**
   - `pong_env.py`:
 - **render/**
