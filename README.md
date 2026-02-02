@@ -2,14 +2,14 @@
 
 ## Repository Overview
 
-- **`env/`**
+- **env/**
   - `pong.py`:
-- **`render/`**
+- **render/**
   - `render.py`:
   - `animate.py`: 
-- **`models/`**
-- **`train/`**
-- **`eval/`**
-- **`examples/`**
+- **models/**
+- **train/**
+- **eval/**
+- **examples/**
   - `sim_and_render.py`:
 
