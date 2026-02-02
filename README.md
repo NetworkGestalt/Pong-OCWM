@@ -5,7 +5,7 @@
 ### Repository Contents
 - env/
   - `pong_env.py`:
-- **render/**
+- render/
   - `render.py`:
   - `animate.py`: 
 - models/
@@ -13,4 +13,5 @@
 - eval/
 - examples/
   - `sim_and_render.py`:
+- assets/
 
