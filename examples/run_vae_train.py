@@ -9,11 +9,9 @@ vae, history = train_vae(num_steps=3000,
                          lr=1e-3,
                          save_path="pong_vae.pth")
 
-# ----- To load the trained model:
-
+# To load the trained model:
 # import torch
 # from vae_model import ObjectVAE
-
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # vae = ObjectVAE(latent_dim=32).to(device)
 # vae.load_state_dict(torch.load("pong_vae.pth", weights_only=True))
