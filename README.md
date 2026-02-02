@@ -1,7 +1,7 @@
 ## Pong-OCWM
 
 ### Description
-<img src="assets/pong.gif" width="250" />
+<img src="assets/pong.gif" width="200" />
 
 ### Repository Contents
 - env/
