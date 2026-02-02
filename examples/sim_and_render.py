@@ -1,5 +1,5 @@
 import numpy as np
-from pong_env import Pong
+from pong import Pong
 from render import Renderer
 from animate import merge_crops, create_animation
 
@@ -25,4 +25,5 @@ if __name__ == "__main__":
 
     anim = create_animation(full_frames)
     anim.save("output.gif", writer="pillow", fps=24)     # requires Pillow package
+
 
