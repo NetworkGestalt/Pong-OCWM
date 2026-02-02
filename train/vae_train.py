@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-from pong_env import Pong
+from pong import Pong
 from render import Renderer
 from vae_model import ObjectVAE
 
@@ -109,3 +109,4 @@ def train_vae(num_steps=300, batch_size=64, latent_dim=32, crop_size=20, upscale
         torch.save(vae.state_dict(), save_path)
     
     return vae, history
+
