@@ -1,7 +1,6 @@
 import numpy as np
 
-# ----- Rendering Parameters -----  
-
+# Rendering Parameters
 DISPLAY_SETTINGS = {
     "digit_patterns": {0: [(0, 0, 3, 1), (0, 0, 1, 5), (2, 0, 1, 5), (0, 4, 3, 1)],
                        1: [(1, 0, 1, 5)],
@@ -22,8 +21,8 @@ DISPLAY_SETTINGS = {
                "ball_prev": np.array([0, 190, 190], dtype=np.float32),   
                "score": np.array([128, 128, 128], dtype=np.float32)}}
 
-# ----- Rendering Helpers -----
 
+# Rendering Helpers
 def _draw_rect(img, x, y, w, h, color):
     """Draw a filled rectangle. (x, y) is bottom-left corner."""
     buffer_size = img.shape[0]
@@ -87,8 +86,8 @@ def _downsample(img, crop_size: int, upscale_factor: int):
     img = img.reshape(crop_size, upscale_factor, crop_size, upscale_factor, 3).mean(axis=(1, 3))
     return np.clip(np.round(img), 0, 255).astype(np.uint8)
 
-# ----- Renderer Class -----
 
+# Rendering Class
 class Renderer:
     def __init__(self, settings, display_settings=None):
         self.settings = settings
@@ -110,19 +109,21 @@ class Renderer:
     def clear_cache(self):
         self._buffer_cache.clear()
 
-    def render_crops(self, state, prev_state, crop_size: int = 20, upscale_factor: int = 4):
+    def render_crops(self, state, prev_state):
         """Return (left_paddle, right_paddle, ball, score) crops as uint8 images."""
+        crop_size = self.settings["crop_size"]
+        upscale_factor = self.settings["upscale_factor"]
+
         buffer_size = crop_size * upscale_factor
         center = buffer_size / 2.0
-        scale = self.settings["resolution_scale"] * upscale_factor
 
         digit_patterns = self.display_settings["digit_patterns"]
         colors = self.display_settings["colors"]
 
-        paddle_w = self.settings["paddle_width"] * scale
-        paddle_h = self.settings["paddle_height"] * scale
-        ball_r = self.settings["ball_radius"] * scale
-        digit_scale = self.settings["score_scale"] * scale
+        paddle_w = self.settings["paddle_width"] * upscale_factor
+        paddle_h = self.settings["paddle_height"] * upscale_factor
+        ball_r = self.settings["ball_radius"] * upscale_factor
+        digit_scale = self.settings["score_scale"] * upscale_factor
 
         paddle_x = center - paddle_w / 2
         paddle_y = center - paddle_h / 2
@@ -130,22 +131,22 @@ class Renderer:
         # Left paddle
         left_buffer = self._get_buffer(buffer_size, idx=0)
         if prev_state is not None:
-            paddle_left_y_prev = paddle_y + (prev_state["paddle_left_y"] - state["paddle_left_y"]) * scale
+            paddle_left_y_prev = paddle_y + (prev_state["paddle_left_y"] - state["paddle_left_y"]) * upscale_factor
             _draw_rect(left_buffer, paddle_x, paddle_left_y_prev, paddle_w, paddle_h, colors["paddle_left_prev"])    
         _draw_rect(left_buffer, paddle_x, paddle_y, paddle_w, paddle_h, colors["paddle_left"])
 
         # Right paddle
         right_buffer = self._get_buffer(buffer_size, idx=1)
         if prev_state is not None:
-            paddle_right_y_prev = paddle_y + (prev_state["paddle_right_y"] - state["paddle_right_y"]) * scale
+            paddle_right_y_prev = paddle_y + (prev_state["paddle_right_y"] - state["paddle_right_y"]) * upscale_factor
             _draw_rect(right_buffer, paddle_x, paddle_right_y_prev, paddle_w, paddle_h, colors["paddle_right_prev"]) 
         _draw_rect(right_buffer, paddle_x, paddle_y, paddle_w, paddle_h, colors["paddle_right"])
 
         # Ball
         ball_buffer = self._get_buffer(buffer_size, idx=2)
         if prev_state is not None:
-            ball_x_prev = center + (prev_state["ball_x"] - state["ball_x"]) * scale
-            ball_y_prev = center + (prev_state["ball_y"] - state["ball_y"]) * scale
+            ball_x_prev = center + (prev_state["ball_x"] - state["ball_x"]) * upscale_factor
+            ball_y_prev = center + (prev_state["ball_y"] - state["ball_y"]) * upscale_factor
             _draw_circle(ball_buffer, ball_x_prev, ball_y_prev, ball_r, colors["ball_prev"])
         _draw_circle(ball_buffer, center, center, ball_r, colors["ball"])
 
@@ -168,10 +169,9 @@ class Renderer:
     def reconstruct_frame(self, crops, state):
         """Composite crop images into a full frame."""
         resolution = self.settings["resolution"]
-        scale = self.settings["resolution_scale"]
         crop_size = crops[0].shape[0]
         half = crop_size // 2
-        
+
         # Back to front: score, left paddle, right paddle, ball
         z_order = [3, 0, 1, 2]
         positions = [(self.settings["paddle_left_x"], state["paddle_left_y"]),
@@ -185,8 +185,8 @@ class Renderer:
             crop = crops[i]
             x, y = positions[i]
             
-            col_center = int(round(x * scale))
-            row_center = int(round(resolution - y * scale))
+            col_center = int(round(x))
+            row_center = int(round(resolution - y))
             
             dst_r1 = max(0, row_center - half)
             dst_r2 = min(resolution, row_center + half)
