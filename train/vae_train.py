@@ -12,17 +12,15 @@ def vae_data_loader(env, renderer, batch_size):
     
     for _ in range(batch_size):
         env.reset(seed=np.random.randint(1_000_000))
-        env.step()
-        state = env.state
-        prev_state = env.prev_state
+        env.step(left_action=None, right_action=None)
     
-        left, right, ball, score = renderer.render_crops(state=state, prev_state=prev_state)
+        left, right, ball, score = renderer.render_crops(state=env.state, prev_state=env.prev_state)
         crops = np.stack([left, right, ball, score], axis=0)    # (K, H, W, 3)
         crops = crops.astype(np.float32) / 255.0
         all_crops.append(crops)
 
-    crops = np.stack(all_crops, axis=0)             # (B, K, H, W, 3)
-    crops = np.transpose(crops, (0, 1, 4, 2, 3))    # (B, K, 3, H, W)
+    crops = np.stack(all_crops, axis=0)                         # (B, K, H, W, 3)
+    crops = np.transpose(crops, (0, 1, 4, 2, 3))                # (B, K, 3, H, W)
 
     return crops
     
@@ -60,7 +58,7 @@ def train_vae(num_steps=3000,
     renderer = Renderer(env.settings)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     vae = ObjectVAE(latent_dim=latent_dim).to(device)
-    optimizer = torch.optim.Adam(vae.parameters(), lr=lr)
+    optimizer = optim.Adam(vae.parameters(), lr=lr)
     
     history = {'total_loss': [], 'recon_loss': [], 'kl_loss': [], 'kl_weight': []}
     
@@ -95,4 +93,3 @@ def train_vae(num_steps=3000,
         torch.save(vae.state_dict(), save_path)
     
     return vae, history
-
