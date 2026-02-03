@@ -1,7 +1,7 @@
 ## Pong-OCWM
 
 ### Description
-<img src="assets/object_encoder.gif" height="250" /> <img src="assets/dynamics_pred.gif" height="250" />
+<img src="assets/object_encoder.gif" height="220" /> <img src="assets/dynamics_pred.gif" height="220" />
 
 ### Repository Contents
 - env/
