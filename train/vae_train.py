@@ -6,11 +6,8 @@ from pong import Pong
 from render import Renderer
 from vae_model import ObjectVAE
 
-def vae_data_loader(env, 
-                    renderer, 
-                    batch_size, 
-                    crop_size: int = 20, 
-                    upscale_factor: int = 4):
+# Training Data Loader
+def vae_data_loader(env, renderer, batch_size): 
     """Generate random Pong frames and extract object crops."""
     all_crops = []
     
@@ -20,11 +17,7 @@ def vae_data_loader(env,
         state = env.state
         prev_state = env.prev_state
     
-        left, right, ball, score = renderer.render_crops(state=state,
-                                                         prev_state=prev_state,
-                                                         crop_size=crop_size,
-                                                         upscale_factor=upscale_factor)
-        
+        left, right, ball, score = renderer.render_crops(state=state, prev_state=prev_state)
         crops = np.stack([left, right, ball, score], axis=0)    # (K, H, W, 3)
         crops = crops.astype(np.float32) / 255.0
         all_crops.append(crops)
@@ -35,8 +28,7 @@ def vae_data_loader(env,
     return crops
     
 
-# ----- Loss Function -----
-
+# Loss Function
 def bce_loss_logits(recon_logits, x, mu, logvar, kl_weight=1.0):
     recon_loss = F.binary_cross_entropy_with_logits(recon_logits, x, reduction='sum') / x.size(0)
     
@@ -46,8 +38,7 @@ def bce_loss_logits(recon_logits, x, mu, logvar, kl_weight=1.0):
     return loss, recon_loss, kl_div
 
 
-# ----- KL Annealing Schedule -----
-
+# KL Annealing Schedule
 def linear_warmup(step, total_steps, target_beta, ramp_proportion=0.75):
     """Ramps from 0 to target_beta over the first ramp_proportion of training."""
     ramp_steps = int(total_steps * ramp_proportion)
@@ -58,31 +49,27 @@ def linear_warmup(step, total_steps, target_beta, ramp_proportion=0.75):
         return target_beta
 
 
-# ----- Training Loop -----
-
-def train_vae(num_steps=300, batch_size=64, latent_dim=32, crop_size=20, upscale_factor=4,
-              target_kl_weight=1.0, ramp_proportion=0.75, lr=1e-3, save_path=None):
-    
+# VAE Training Loop
+def train_vae(num_steps=3000, 
+              batch_size=64, 
+              latent_dim=32, 
+              target_kl_weight=1.0, 
+              ramp_proportion=0.8, 
+              lr=1e-3, 
+              save_path=None):
     env = Pong()
     renderer = Renderer(env.settings)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     vae = ObjectVAE(latent_dim=latent_dim).to(device)
     optimizer = optim.Adam(vae.parameters(), lr=lr)
     
-    history = {'total_loss': [],
-               'recon_loss': [],
-               'kl_loss': [],
-               'kl_weight': []}
+    history = {'total_loss': [], 'recon_loss': [], 'kl_loss': [], 'kl_weight': []}
     
     vae.train()
     
     for step in range(1, num_steps + 1):
 
-        crops, _ = vae_data_loader(env, renderer,
-                                   batch_size=batch_size, 
-                                   crop_size=crop_size, 
-                                   upscale_factor=upscale_factor)
-        
+        crops, _ = vae_data_loader(env, renderer, batch_size=batch_size)        
         B, K, C, H, W = crops.shape
         crops_flat = torch.from_numpy(crops).reshape(B*K, C, H, W).to(device)
         
@@ -109,4 +96,3 @@ def train_vae(num_steps=300, batch_size=64, latent_dim=32, crop_size=20, upscale
         torch.save(vae.state_dict(), save_path)
     
     return vae, history
-
