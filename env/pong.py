@@ -120,7 +120,6 @@ class Pong:
         return paddle_y + step + noise
 
     # Dynamics Helpers
-
     def _mod_angle(self, angle):
         return angle % (2.0 * np.pi)
 
@@ -270,3 +269,4 @@ class Pong:
         
         return new_state, info
         
+
