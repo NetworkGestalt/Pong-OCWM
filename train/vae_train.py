@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.optim as optim
 from pong import Pong
 from render import Renderer
 from vae_model import ObjectVAE
@@ -61,7 +60,7 @@ def train_vae(num_steps=3000,
     renderer = Renderer(env.settings)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     vae = ObjectVAE(latent_dim=latent_dim).to(device)
-    optimizer = optim.Adam(vae.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(vae.parameters(), lr=lr)
     
     history = {'total_loss': [], 'recon_loss': [], 'kl_loss': [], 'kl_weight': []}
     
@@ -96,3 +95,4 @@ def train_vae(num_steps=3000,
         torch.save(vae.state_dict(), save_path)
     
     return vae, history
+
