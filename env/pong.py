@@ -2,25 +2,33 @@ import numpy as np
 
 def create_settings():
     settings = {
-        "resolution": 64,            # Pixel side-length of game
-        "resolution_scale": 1.0,     # Scaling factor to upsample renders without changing physics
-        "score_scale": 2.0,          # Scale of the score (used by the digit_patterns)
-        "border_size": 2,          
-        "paddle_height": 12,        
+        # Game canvas & rendering
+        "resolution": 64,           # game canvas side length in pixels
+        "border_size": 2,           # wall thickness
+        "crop_size": 20,            # object crop dimensions
+        "upscale_factor": 4,        # internal render buffer multiplier
+
+        # Ball
+        "ball_vel_magn": 2.0,       # speed (pixels per step)
+        "ball_vel_dir_noise": 0.0,  # per-step direction jitter
+        "ball_bounce_noise": 0.1,   # direction jitter on bounce
+
+        # Paddles
+        "ball_radius": 2.4,
+        "paddle_height": 12,
         "paddle_width": 4,
-        "ball_radius": 2.4,   
-        "ball_vel_magn": 2.0,
-        "ball_vel_dir_noise": 0.0,  
-        "ball_bounce_noise": 0.1,
-        "max_points": 5,
-        
-        # Action settings
-        "action_step_size": 2.0,
-        "action_step_noise": 0.05,
-        "ai_decay": 0.95,            # AR(1) decay factor (higher = more persistent bias)
-        "ai_bias_noise": 1.75,       # sigma for AR(1) noise shocks
-        "prob_rand_action": 0.05,    # per-step probability of completely random action
-        "ai_dead_zone": 2.0,         # don't move paddle if within this distance of perceived ball (prevents oscillations)
+        "action_step_size": 2.0,    # pixels per action
+        "action_step_noise": 0.05,  # movement jitter
+
+        # Score
+        "score_scale": 2.0, 
+        "max_points": 5, 
+
+        # AI controller
+        "ai_decay": 0.95,           # bias persistence (AR(1) coefficient)
+        "ai_bias_noise": 1.7,       # bias shock magnitude
+        "prob_rand_action": 0.05,   # chance of random action per step
+        "ai_dead_zone": 2.0,        # ignore ball if within this y-distance (prevents oscillations)
     }
     
     settings["paddle_left_x"] = 3 + settings["border_size"]
@@ -50,7 +58,7 @@ def create_settings():
 
 
 class Pong:
-    ACTIONS = {-1: "down", 0: "still", 1: "up"}     
+    ACTIONS = {-1: "down", 0: "still", 1: "up"} 
 
     def __init__(self, settings=None):
         self.settings = create_settings() if settings is None else settings
@@ -82,8 +90,7 @@ class Pong:
         self.state = init_state
         return init_state
 
-    # ----- AI Controller -----
-    
+    # AI Controller
     def _get_ai_action(self, paddle_y, ball_y, current_bias):
         """Determine AI action based on perceived ball position."""
         decay = self.settings["ai_decay"]
@@ -106,14 +113,13 @@ class Pong:
         return action, new_bias
 
     # Paddle Movement
-
     def _apply_paddle_action(self, paddle_y, action):
         """Apply action to paddle position with noise."""
         step = action * self.settings["action_step_size"]
         noise = self.rng.standard_normal() * self.settings["action_step_noise"]
         return paddle_y + step + noise
 
-    # ----- Dynamics Helpers -----
+    # Dynamics Helpers
 
     def _mod_angle(self, angle):
         return angle % (2.0 * np.pi)
@@ -263,5 +269,4 @@ class Pong:
         info["right_action"] = right_action
         
         return new_state, info
-
-
+        
