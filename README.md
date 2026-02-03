@@ -1,10 +1,7 @@
 ## Pong-OCWM
 
 ### Description
-<div style="display:flex; gap:32px; align-items:flex-start;">
-  <img src="assets/object_encoder.gif" height="240" />
-  <img src="assets/dynamics_pred.gif" height="240" />
-</div>
+<img src="assets/object_encoder.gif" height="240" />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="assets/dynamics_pred.gif" height="240" />
 
 ### Repository Contents
 - env/
