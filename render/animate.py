@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+# Animation Functions
 def merge_crops(crops, pad: int = 2):
     """Horizontally concatenate object crops into one image."""
     pad = int(pad)
@@ -19,13 +20,13 @@ def merge_crops(crops, pad: int = 2):
 
     return canvas
 
-def create_animation(frames, fps: int = 24, figure_scale: int = 5):
+def create_animation(frames, fps: int = 24, fig_scale: int = 5):
     """Create a matplotlib animation from a sequence of frames."""
     frame0 = frames[0]
     h, w = frame0.shape[:2]
 
     dpi = 100
-    fig = plt.figure(figsize=(figure_scale * w / dpi, figure_scale * h / dpi), dpi=dpi, frameon=False)
+    fig = plt.figure(figsize=(fig_scale * w / dpi, fig_scale * h / dpi), dpi=dpi, frameon=False)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_axis_off()
 
@@ -40,4 +41,3 @@ def create_animation(frames, fps: int = 24, figure_scale: int = 5):
     plt.close(fig)
     
     return anim
-
