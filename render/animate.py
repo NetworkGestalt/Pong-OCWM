@@ -24,12 +24,10 @@ def create_animation(frames, fps: int = 24, fig_scale: int = 5):
     """Create a matplotlib animation from a sequence of frames."""
     frame0 = frames[0]
     h, w = frame0.shape[:2]
-
     dpi = 100
     fig = plt.figure(figsize=(fig_scale * w / dpi, fig_scale * h / dpi), dpi=dpi, frameon=False)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_axis_off()
-
     im = ax.imshow(frame0, interpolation="nearest", animated=True)
 
     def update(i):
