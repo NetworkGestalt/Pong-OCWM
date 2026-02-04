@@ -1,6 +1,8 @@
 import numpy as np
+from typing import Optional
 
-def create_settings():
+def create_settings() -> dict:
+    """Create and return the default game configuration dictionary."""
     settings = {
         # Game canvas & rendering
         "resolution": 64,           # game canvas side length in pixels
@@ -30,26 +32,31 @@ def create_settings():
         "prob_rand_action": 0.05,   # chance of random action per step
         "ai_dead_zone": 2.0,        # ignore ball if within this y-distance (prevents oscillations)
     }
-    
+
+    # Left paddle position limits    
     settings["paddle_left_x"] = 3 + settings["border_size"]
     settings["paddle_left_y_min"] = settings["border_size"] + (settings["paddle_height"] / 2.0)
     settings["paddle_left_y_max"] = settings["resolution"] - settings["border_size"] - (settings["paddle_height"] / 2.0)
-    
+
+    # Right paddle position limits (mirrored)
     settings["paddle_right_x"] = settings["resolution"] - settings["paddle_left_x"]
     settings["paddle_right_y_min"] = settings["border_size"] + (settings["paddle_height"] / 2.0)
     settings["paddle_right_y_max"] = settings["resolution"] - settings["border_size"] - (settings["paddle_height"] / 2.0)
-    
+
+    # Ball position limits
     settings["ball_x_min"] = settings["border_size"]
     settings["ball_x_max"] = settings["resolution"] - settings["border_size"]
     settings["ball_y_max"] = settings["resolution"] - settings["ball_radius"] - settings["border_size"]
     settings["ball_y_min"] = settings["ball_radius"] + settings["border_size"]
 
+    # Ball boundaries for scoring and spawning
     settings["ball_x_min_point"] = settings["ball_radius"] + settings["border_size"]
     settings["ball_x_max_point"] = settings["resolution"] - settings["ball_radius"] - settings["border_size"]
     settings["ball_x_max_sample"] = settings["paddle_right_x"] - (settings["paddle_width"] / 2.0) - settings["ball_radius"]
     settings["ball_x_min_sample"] = settings["paddle_left_x"] + (settings["paddle_width"] / 2.0) + settings["ball_radius"]
     settings["ball_pos_noise"] = settings["ball_vel_magn"] * 0.1
 
+    # Center coordinates for resets and rendering
     settings["center_point_x"] = settings["resolution"] / 2.0
     settings["center_point_y"] = settings["resolution"] / 2.0
     settings["score_center"] = (int(settings["resolution"] / 2), int(settings["resolution"] * 0.88))
@@ -60,7 +67,7 @@ def create_settings():
 class Pong:
     ACTIONS = {-1: "down", 0: "still", 1: "up"} 
 
-    def __init__(self, settings=None):
+    def __init__(self, settings: Optional[dict] = None) -> None:
         self.settings = create_settings() if settings is None else settings
         self.rng = np.random.default_rng(0)
         self.t = 0
@@ -69,8 +76,8 @@ class Pong:
         self.ai_bias_left = 0.0
         self.ai_bias_right = 0.0
 
-    def reset(self, seed: int = 0):
-        """Reset environment and sample initial state."""
+    def reset(self, seed: int = 0) -> dict:
+        """Reset the environment to a random initial state."""
         self.rng = np.random.default_rng(seed)
         self.t = 0
         self.prev_state = None
@@ -90,9 +97,15 @@ class Pong:
         self.state = init_state
         return init_state
 
+    # ------------------------------
     # AI Controller
-    def _get_ai_action(self, paddle_y, ball_y, current_bias):
-        """Determine AI action based on perceived ball position."""
+    # ------------------------------
+    
+    def _get_ai_action(self, paddle_y: float, ball_y: float, current_bias: float) -> tuple[int, float]:
+        """Compute AI action based on perceived ball position. Uses an AR(1) process to emulate imperfect perception/human error,
+        in addition to a small probability of taking a random action."""
+
+        # Update perception bias: bias_t = decay * bias_{t-1} + noise
         decay = self.settings["ai_decay"]
         noise_scale = self.settings["ai_bias_noise"]
         new_bias = decay * current_bias + noise_scale * self.rng.standard_normal()
@@ -102,34 +115,40 @@ class Pong:
         else:
             perceived_ball_y = ball_y + new_bias
             diff = perceived_ball_y - paddle_y
-            
+
+            # Dead zone: prevents oscillation when paddle is close to ball in the y-axis
             if abs(diff) < self.settings["ai_dead_zone"]:
                 action = 0  
             elif diff > 0:
-                action = 1  
+                action = 1    # paddle moves up
             else:
-                action = -1 
+                action = -1   # paddle moves down
         
         return action, new_bias
 
-    # Paddle Movement
-    def _apply_paddle_action(self, paddle_y, action):
-        """Apply action to paddle position with noise."""
+    def _apply_paddle_action(self, paddle_y: float, action: int) -> float:
+        """Apply action to paddle position with movement noise."""
         step = action * self.settings["action_step_size"]
         noise = self.rng.standard_normal() * self.settings["action_step_noise"]
         return paddle_y + step + noise
 
+    # ------------------------------
     # Dynamics Helpers
-    def _mod_angle(self, angle):
+    # ------------------------------
+    
+    def _mod_angle(self, angle: float) -> float:
+        """Normalize angle to [0, 2π) range."""
         return angle % (2.0 * np.pi)
 
-    def _angle_flip(self, angle, axis="y"):
+    def _angle_flip(self, angle: float, axis: str = "y") -> float:
+        """Reflect angle across the specified axis ('x' for horizontal, 'y' for vertical)."""
         if axis == "x":
             return self._mod_angle(np.pi - angle)
         else:
             return self._mod_angle(-angle)
 
-    def _ball_collision(self, paddle_tag, new_state, prev_state):
+    def _ball_collision(self, paddle_tag: str, new_state: dict, prev_state: dict) -> bool:
+        """Check if the ball collides with the specified paddle based on whether their bounding boxes overlap."""
         paddle_x = self.settings[paddle_tag + "_x"]
         paddle_y = prev_state[paddle_tag + "_y"]
         paddle_height = self.settings["paddle_height"]
@@ -142,9 +161,11 @@ class Pong:
         else:
             ball_x_outer = ball_x_center - self.settings["ball_radius"]
 
+        # Check y-overlap: ball must be within paddle's vertical range
         if ball_y > paddle_y + paddle_height / 2.0 or ball_y < paddle_y - paddle_height / 2.0:
             return False
 
+        # Check x-overlap depending on left or right paddle
         if paddle_tag.endswith("right"):
             return bool(ball_x_center < paddle_x + paddle_width / 2.0
                         and ball_x_outer > paddle_x - paddle_width / 2.0)
@@ -154,10 +175,12 @@ class Pong:
                         and ball_x_outer < paddle_x + paddle_width / 2.0)
         return False
 
-    def _hard_limit(self, v, v_min, v_max):
+    def _hard_limit(self, v: float, v_min: float, v_max: float) -> float:
+        """Clamp a value to [v_min, v_max]."""
         return max(min(v, v_max), v_min)
 
-    def _put_in_boundaries(self, state):
+    def _put_in_boundaries(self, state: dict) -> dict:
+        """Clamp all state variables to their valid ranges."""
         for key in state:
             if key == "ball_vel_dir":
                 state[key] = self._mod_angle(state[key])
@@ -165,19 +188,22 @@ class Pong:
                 state[key] = self._hard_limit(state[key], self.settings[key + "_min"], self.settings[key + "_max"])
         return state
 
-    def _update_dynamics(self, prev_state, left_action, right_action):
-        """Compute the next environment state from the previous state and paddle actions."""
+    def _update_dynamics(self, prev_state: dict, left_action: int, right_action: int) -> tuple[dict, dict]:
+        """Compute the next game state from current state and actions.
+        Handles ball movement, wall/paddle collisions, scoring, and resets."""
         new_state = {}
         info = {}
 
+        # Update paddle positions
         new_state["paddle_left_y"] = self._apply_paddle_action(prev_state["paddle_left_y"], left_action)
         new_state["paddle_right_y"] = self._apply_paddle_action(prev_state["paddle_right_y"], right_action)
 
-        # Ball movement
+        # Ball movement: convert (direction, speed) into updated (x, y) position
         vel_y = np.cos(prev_state["ball_vel_dir"]) * prev_state["ball_vel_magn"]
         vel_x = np.sin(prev_state["ball_vel_dir"]) * prev_state["ball_vel_magn"]
         new_state["ball_x"] = prev_state["ball_x"] + vel_x
 
+        # Check for score updates (ball passed paddle)
         point_left, point_right, ball_reset = False, False, False
         if new_state["ball_x"] < self.settings["ball_x_min_point"]:
             point_right = True
@@ -186,6 +212,7 @@ class Pong:
             point_left = True
             ball_reset = True
 
+        # Reset ball and paddles to center after scoring
         if ball_reset:
             new_state["ball_x"] = self.settings["center_point_x"]
             new_state["ball_y"] = self.settings["center_point_y"]
@@ -198,7 +225,7 @@ class Pong:
             new_state["ball_y"] = prev_state["ball_y"] + vel_y
             new_state["ball_vel_dir"] = prev_state["ball_vel_dir"]
 
-            # Wall collisions
+            # Wall collisions (top and bottom boundaries)
             wall_collision = False
             if new_state["ball_y"] > self.settings["ball_y_max"]:
                 new_state["ball_y"] = self.settings["ball_y_max"] - (new_state["ball_y"] - self.settings["ball_y_max"])
@@ -228,15 +255,16 @@ class Pong:
                 paddle_collision = "right"
             info["paddle_collision"] = paddle_collision
 
-            # Position noise
+            # Add small ball position noise
             new_state["ball_x"] += self.rng.standard_normal() * self.settings["ball_pos_noise"]
             new_state["ball_y"] += self.rng.standard_normal() * self.settings["ball_pos_noise"]
             new_state["ball_vel_dir"] += self.rng.standard_normal() * self.settings["ball_vel_dir_noise"]
 
-        # Scoring
+        # Update scores
         new_state["score_left"] = prev_state["score_left"] + int(point_left)
         new_state["score_right"] = prev_state["score_right"] + int(point_right)
 
+        # Reset scores when a player reaches max points
         if max(new_state["score_right"], new_state["score_left"]) >= self.settings["max_points"]:
             new_state["score_left"] = 0
             new_state["score_right"] = 0
@@ -248,11 +276,12 @@ class Pong:
 
         return new_state, info
 
-    def step(self, left_action=None, right_action=None):
-        """Step the game forward by one frame."""
+    def step(self, left_action: Optional[int] = None, right_action: Optional[int] = None) -> tuple[dict, dict]:
+        """Advance the game by one timestep. If an action is None, the AI controller determines it automatically."""
         if self.state is None:
             raise RuntimeError("Call reset() before step().")
 
+        # Use AI controller if no action provided
         if left_action is None:
             left_action, self.ai_bias_left = self._get_ai_action(self.state["paddle_left_y"], 
                                                                  self.state["ball_y"], self.ai_bias_left)   
@@ -269,4 +298,3 @@ class Pong:
         
         return new_state, info
         
-
