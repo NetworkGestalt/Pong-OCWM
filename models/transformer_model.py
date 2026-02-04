@@ -7,9 +7,11 @@ class RotaryEmbedding(nn.Module):
     """Applies RoPE to q/k tensors shaped (B, heads, seq_len, head_dim)."""
     def __init__(self, dim: int, max_seq_len: int = 128, base: float = 10000.0):
         super().__init__()
-        assert dim % 2 == 0
+        assert dim % 2 == 0, "RoPE dimension must be even"
+        
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
+        
         t = torch.arange(max_seq_len).float()
         freqs = torch.einsum("i,j->ij", t, inv_freq)    
         self.register_buffer("cos_cached", freqs.cos()) 
@@ -26,8 +28,8 @@ class RotaryEmbedding(nn.Module):
 
 
 class ObjectTokenizer(nn.Module):
-    """Generates a batch of tokens of shape (B, W, 6, d_model) for [obj1, obj2, obj3, obj4, actL, actR].
-        Includes three types of embedding:
+    """Outputs (B, W, 6, d_model) with token layout: [left_paddle, right_paddle, ball, score, act_left, act_right].
+        Includes three types of embeddings:
           - object_id_emb: left paddle / right paddle / ball / score
           - action_id_emb: left paddle / right paddle
           - action_embedding: up / down / still (shared by both paddles)"""
@@ -36,7 +38,7 @@ class ObjectTokenizer(nn.Module):
                  vae_latent_dim: int = 32,
                  pos_dim: int = 2,
                  n_actions: int = 3,
-                 d_model: int = 256):
+                 d_model: int = 256) -> None:
         super().__init__()
 
         self.d_model = d_model
@@ -48,7 +50,7 @@ class ObjectTokenizer(nn.Module):
         self.obj_layer_norm = nn.LayerNorm(obj_in_dim)
         self.obj_proj = nn.Linear(obj_in_dim, d_model)
 
-        # Action embedding (0=down, 1=still, 2=up)
+        # Action embedding (0=down, 1=still, 2=up): shifted {-1, 0, 1} -> {0, 1, 2} for indexing
         self.action_embedding = nn.Embedding(n_actions, d_model)
 
         # Action identity embedding (0=left, 1=right)
@@ -60,44 +62,41 @@ class ObjectTokenizer(nn.Module):
         self.register_buffer("object_ids", torch.tensor([0, 1, 2, 3], dtype=torch.long))
 
     def forward(self,
-                latents: Tensor,            # (B, W, K, latent_dim)
-                pos: Tensor,                # (B, W, K, 2)
-                left_actions: Tensor,       # (B, W)
-                right_actions: Tensor):     # (B, W)
-
+                latents: Tensor,        # (B, W, K, latent_dim)
+                pos: Tensor,            # (B, W, K, 2)
+                left_actions: Tensor,   # (B, W)
+                right_actions: Tensor   # (B, W)
+                ) -> Tensor:
         B, W, K, _ = latents.shape
 
-        # Object tokens
+        # Object tokens: project (latent, pos) and add object identity
         obj_features = torch.cat([latents, pos], dim=-1)         
         obj_features = self.obj_layer_norm(obj_features)
         obj_tokens = self.obj_proj(obj_features) + self.obj_id_emb(self.object_ids).view(1, 1, K, -1)    
 
-        # Action tokens (content + identity)
+        # Action tokens: embed action content + add paddle side identity
         side_embs = self.action_id_emb(self.action_sides)       
-
-        left_actions = left_actions.long() + 1      # shift action indicators {-1, 0, 1} -> {0, 1, 2}
+        left_actions = left_actions.long() + 1     
         right_actions = right_actions.long() + 1
         left_tok = self.action_embedding(left_actions) + side_embs[0].view(1, 1, -1)    
         right_tok = self.action_embedding(right_actions) + side_embs[1].view(1, 1, -1)    
-
         act_tokens = torch.stack([left_tok, right_tok], dim=2)                      
 
-        x = torch.cat([obj_tokens, act_tokens], dim=2)
-        return x
+        return torch.cat([obj_tokens, act_tokens], dim=2)
 
 
 class SpatiotemporalAttention(nn.Module):
     """Factorized Spatiotemporal Attention:
-        - Spatial attention: contextualizes within each timestep.
-        - Causal temporal attention: attends to previous contextualized states with RoPE."""
+        - Spatial attention: contextualizes (object, action) tokens within each timestep (bidirectional).
+        - Temporal attention: attends to previous contextualized states with RoPE (causal)."""
 
-    def __init__(self, d_model: int, n_heads: int, max_seq_len: int = 128, dropout: float = 0.1):
+    def __init__(self, d_model: int, n_heads: int, max_seq_len: int = 128, dropout: float = 0.1) -> None:
         super().__init__()
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
         self.dropout = dropout
 
-        # Spatial attention (standard MHA)
+        # Spatial attention (Multiheaded)
         self.spatial_norm = nn.LayerNorm(d_model)
         self.spatial_attn = nn.MultiheadAttention(d_model, n_heads, batch_first=True, dropout=dropout)
 
@@ -116,13 +115,13 @@ class SpatiotemporalAttention(nn.Module):
                                 nn.Linear(4 * d_model, d_model))
 
     def _spatial_attn(self, x: Tensor) -> Tensor:
-        """x: (B*W, S, D) -> (B*W, S, D)"""
+        """Attend within each timestep. x: (B*W, S, D)."""
         x_norm = self.spatial_norm(x)
         out, _ = self.spatial_attn(x_norm, x_norm, x_norm)
         return x + out
 
     def _temporal_attn(self, x: Tensor, causal_mask: Tensor = None) -> Tensor:
-        """x: (B*S, W, D) -> (B*S, W, D)"""
+        """Attend across timesteps with RoPE. x: (B*S, W, D)."""
         B, W, D = x.shape
         x_norm = self.temporal_norm(x)
 
@@ -146,6 +145,7 @@ class SpatiotemporalAttention(nn.Module):
         return x + self.temporal_out(out)
 
     def forward(self, x: Tensor, causal_mask: Tensor = None) -> Tensor:
+        """Apply spatial attention, temporal attention, then feedforward. Input x shape: (B, W, S, D)."""
         B, W, S, D = x.shape
 
         # Spatial: attend within each timestep
@@ -161,6 +161,7 @@ class SpatiotemporalAttention(nn.Module):
 
 
 class Transformer(nn.Module):
+    """Transformer that predicts next-step object latents and positions given a context window of W previous frames."""
     def __init__(self,
                  tokenizer: nn.Module,
                  n_layers: int = 3,
@@ -168,23 +169,24 @@ class Transformer(nn.Module):
                  n_heads: int = 4,
                  latent_dim: int = 32,
                  max_seq_len: int = 128,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1) -> None:
         super().__init__()
 
         self.tokenizer = tokenizer
-        self.layers = nn.ModuleList([SpatiotemporalAttention(d_model=d_model, n_heads=n_heads, 
-                                                              max_seq_len=max_seq_len, dropout=dropout)
-                                     for _ in range(n_layers)])
+        self.layers = nn.ModuleList([
+            SpatiotemporalAttention(d_model=d_model, n_heads=n_heads, max_seq_len=max_seq_len, dropout=dropout)
+            for _ in range(n_layers)])
 
         self.latent_head = nn.Linear(d_model, latent_dim)
         self.pos_head = nn.Linear(d_model, 2)
 
     def forward(self,
-                latents: Tensor,          # (B, W, K, latent_dim)
-                pos: Tensor,              # (B, W, K, 2)
-                left_actions: Tensor,     # (B, W)
-                right_actions: Tensor):   # (B, W)
-
+                latents: Tensor,        # (B, W, K, latent_dim)
+                pos: Tensor,            # (B, W, K, 2)
+                left_actions: Tensor,   # (B, W)
+                right_actions: Tensor   # (B, W)
+                ) -> dict[str, Tensor]:
+        """Predicts the next-step latents and positions for each of the 4 object tokens."""
         x = self.tokenizer(latents, pos, left_actions, right_actions)    
 
         # Causal mask for temporal attention (W, W)
@@ -193,13 +195,9 @@ class Transformer(nn.Module):
 
         for layer in self.layers:
             x = layer(x, causal_mask=causal_mask)      
-
-        obj_tokens = x[:, :, :4, :]
+ 
+        obj_tokens = x[:, :, :4, :]    # object tokens only, exclude action tokens
         pred_latents = self.latent_head(obj_tokens)      
         pred_pos = self.pos_head(obj_tokens)          
 
-        out = {"pred_latents": pred_latents,
-               "pred_pos": pred_pos}
-
-        return out
-                  
+        return {"pred_latents": pred_latents, "pred_pos": pred_pos}                  
