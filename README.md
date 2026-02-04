@@ -1,6 +1,15 @@
 ## Pong-OCWM
 
-### Description (WIP)
+### Description
+
+Object-Centric World Models (OCWMs) learn object-level latent representations of the environment and predict their future states. In this implementation, we train a Variational Autoencoder (VAE) on ground-truth Pong object masks (ball, left paddle, right paddle, score), tokenize the objects’ learned latent representations along with their known positions, and train a transformer to predict next-step latent object states given previous frames and actions. In particular, the transformer uses spatial (inter-object) attention within each frame, and causal attention over a temporal context window of spatially-contextualized object states. To improve the accuracy of long autoregressive rollouts, we train the transformer with self-forcing; that is; we optimize a temporally discounted sum of per-step losses over an autoregressive rollout during training.
+
+The code for our Pong environment is based on the CITRIS Interventional Pong dataset [1], released under the BSD 3-Clause Clear License, with slight changes to increase simulation speed (e.g., rendering frames by directly writing into preallocated NumPy arrays rather than rebuilding full Matplotlib figures). The overall approach of using ground-truth object mask and encoding the ball’s velocity by including its previous position/state in the observation is based on the Interventional Pong experiments in SPARTAN [2].
+
+[1] Lippe, P., Magliacane, S., Löwe, S., Asano, Y. M., Cohen, T., & Gavves, S. (2022). CITRIS: Causal Identifiability from Temporal Intervened Sequences. Proceedings of the 39th International Conference on Machine Learning (Vol. 162, pp. 13557–13603). PMLR. https://proceedings.mlr.press/v162/lippe22a.html
+
+[2] Lei, A., Schölkopf, B., & Posner, I. (2025). SPARTAN: A Sparse Transformer World Model Attending to What Matters. The Thirty-Ninth Annual Conference on Neural Information Processing Systems. https://openreview.net/forum?id=uS5ch7GjZ4
+
 <img src="assets/object_encoder.gif" height="200" />&nbsp;&nbsp;&nbsp;&nbsp;<img src="assets/dynamics_pred.gif" height="200" />
 
 ### Repository Contents (WIP)
