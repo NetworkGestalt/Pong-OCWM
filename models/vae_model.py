@@ -4,11 +4,10 @@ import torch.nn.functional as F
 from torch import Tensor
 
 class ObjectVAE(nn.Module):
-    """VAE that encodes 20x20 RGB image crops into a latent representation."""
+    """VAE that encodes (B, 3, 20, 20) RGB crops into (B, latent_dim) latent vectors."""
     
     def __init__(self, latent_dim: int = 32) -> None:
         super().__init__()
-        
         self.latent_dim = latent_dim
 
         # Encoder: (B, 3, 20, 20) -> (B, latent_dim) for mu and logvar
@@ -55,3 +54,4 @@ class ObjectVAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
         
+
