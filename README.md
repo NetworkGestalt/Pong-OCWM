@@ -14,14 +14,14 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
 
 *TODO: train the dynamics model for a larger number of steps, evaluate it using pixel MSE as a function of rollout length, and run an ablation on the context window size and self-forcing horizon; map keyboard inputs to paddle actions during rollout to make the generated Pong dynamics fully interactive.*
 
-### Repository Contents (WIP)
+### Repository Contents
 - env/
   - `pong.py`: Pong game simulation with configurable physics and AI-controlled paddles. The AI controller of either paddle can be overridden by user-defined actions {-1: "down", 0: "still", 1: "up"}, making it suitable for interactive rollouts or multi-agent reinforcement learning. 
 - render/
   - `render.py`:
   - `animate.py`: 
 - models/
-  - `vae_model.py`:
+  - `vae_model.py`: Convolutional Variational Autoencoder (C-VAE) for encoding object crops into a latent space.
   - `transformer_model.py`:
 - train/
   - `vae_train.py`:
