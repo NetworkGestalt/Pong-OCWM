@@ -16,7 +16,7 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
 
 ### Repository Contents (WIP)
 - env/
-  - `pong.py`:
+  - `pong.py`: Pong game simulation with configurable physics and AI-controlled paddles. The AI controller of either paddle can be overridden by user-defined actions {-1: "down", 0: "still", 1: "up"}, making it suitable for interactive rollouts or multi-agent reinforcement learning. 
 - render/
   - `render.py`:
   - `animate.py`: 
