@@ -1,6 +1,6 @@
 ## Pong-OCWM
 
-<img src="assets/object_encoder.gif" height="200" />&nbsp;&nbsp;&nbsp;&nbsp;<img src="assets/dynamics_pred.gif" height="200" />
+<img src="assets/dynamics_pred.gif" height="200" /> &nbsp;&nbsp;&nbsp;&nbsp; <img src="assets/object_encoder.gif" height="200" />
 
 ### Description
 
