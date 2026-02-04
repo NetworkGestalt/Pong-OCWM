@@ -18,7 +18,7 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
 - env/
   - `pong.py`: Pong game simulation with configurable physics and AI-controlled paddles. The AI controller of either paddle can be overridden by user-defined actions {-1: "down", 0: "still", 1: "up"}, making it suitable for interactive rollouts or multi-agent reinforcement learning. 
 - render/
-  - `render.py`:
+  - `render.py`: Rendering utilities to generate ground-truth object crops from game state and reconstruct full-game frames from crops and positions.
   - `animate.py`: 
 - models/
   - `vae_model.py`: Convolutional Variational Autoencoder (C-VAE) for encoding object crops into a latent space.
