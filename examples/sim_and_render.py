@@ -8,17 +8,16 @@ if __name__ == "__main__":
     env = Pong()
     renderer = Renderer(env.settings)
     env.reset(seed=np.random.randint(1_000_000))
-    
+
     object_crops = []
     full_frames = []
-    
+
     for _ in range(T):
-        state, info = env.step(left_action=None, right_action=None)
+        state, info = env.step(left_action=None, right_action=None)   # AI controls both paddles
         left, right, ball, score = renderer.render_crops(state=state, prev_state=env.prev_state)
         object_crops.append(merge_crops([left, right, ball, score]))
         full_frame = renderer.reconstruct_frame(crops=(left, right, ball, score), state=state)
         full_frames.append(full_frame)
-        #print(info)
-    
+
     anim = create_animation(full_frames)
-    anim.save("pong.gif", writer="pillow", fps=24)   # requires Pillow package
+    anim.save("pong.gif", writer="pillow", fps=24)
