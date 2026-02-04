@@ -26,7 +26,7 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
 - train/
   - `vae_train.py`:
   - `transformer_train.py`: 
-- eval/ (WIP)
+- eval (WIP)/
   - 
 - examples/
   - `sim_and_render.py`: Run a Pong simulation and save as an animated GIF.
