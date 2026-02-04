@@ -22,7 +22,7 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
   - `animate.py`: 
 - models/
   - `vae_model.py`: Convolutional Variational Autoencoder (C-VAE) for encoding object crops into a latent space.
-  - `transformer_model.py`:
+  - `transformer_model.py`: Spatiotemporal Transformer that predicts latent object dynamics using inter-object attention, causal temporal attention, and RoPE positional encoding.
 - train/
   - `vae_train.py`:
   - `transformer_train.py`: 
