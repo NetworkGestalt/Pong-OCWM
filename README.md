@@ -10,7 +10,9 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
 
 [1] Lippe, P., Magliacane, S., Löwe, S., Asano, Y. M., Cohen, T., & Gavves, S. (2022). CITRIS: Causal Identifiability from Temporal Intervened Sequences. Proceedings of the 39th International Conference on Machine Learning (Vol. 162, pp. 13557–13603). PMLR. https://proceedings.mlr.press/v162/lippe22a.html
 
-[2] Lei, A., Schölkopf, B., & Posner, I. (2025). SPARTAN: A Sparse Transformer World Model Attending to What Matters. The Thirty-Ninth Annual Conference on Neural Information Processing Systems. https://openreview.net/forum?id=uS5ch7GjZ4
+[2] Lei, A., Schölkopf, B., & Posner, I. (2025). SPARTAN: A Sparse Transformer World Model Attending to What Matters. The Thirty-Ninth Annual Conference on Neural Information Processing Systems. NIPS. https://openreview.net/forum?id=uS5ch7GjZ4
+
+*TODO: train the dynamics model for a larger number of steps, and evaluate it using pixel MSE as a function of rollout length. Then, run an ablation on the context window size and self-forcing horizon. Finally, map keyboard inputs to paddle actions during rollout to make the generated Pong rollout fully interactive.*
 
 ### Repository Contents (WIP)
 - env/
