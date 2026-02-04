@@ -1,7 +1,11 @@
 import numpy as np
 
+# ------------------------------
 # Rendering Parameters
+# ------------------------------
+
 DISPLAY_SETTINGS = {
+    # Digit patterns for score display: each digit is a list of (x, y, width, height) rectangles in a 3x5 grid    
     "digit_patterns": {0: [(0, 0, 3, 1), (0, 0, 1, 5), (2, 0, 1, 5), (0, 4, 3, 1)],
                        1: [(1, 0, 1, 5)],
                        2: [(0, 0, 3, 1), (0, 2, 3, 1), (0, 4, 3, 1), (2, 2, 1, 3), (0, 0, 1, 3)],
@@ -12,7 +16,8 @@ DISPLAY_SETTINGS = {
                        7: [(0, 4, 3, 1), (2, 0, 1, 5)],
                        8: [(0, 0, 1, 5), (2, 0, 1, 5), (0, 0, 3, 1), (0, 2, 3, 1), (0, 4, 3, 1)],
                        9: [(2, 0, 1, 5), (0, 2, 3, 1), (0, 4, 3, 1), (0, 2, 1, 3)]},
-        
+
+    # Object colors: previous position in darker shade to emulate motion blur/indicate velocity
     "colors": {"paddle_left": np.array([0, 0, 255], dtype=np.float32),      
                "paddle_right": np.array([0, 255, 0], dtype=np.float32),  
                "ball": np.array([255, 0, 0], dtype=np.float32),     
@@ -21,17 +26,21 @@ DISPLAY_SETTINGS = {
                "ball_prev": np.array([0, 190, 190], dtype=np.float32),   
                "score": np.array([128, 128, 128], dtype=np.float32)}}
 
-
+# ------------------------------
 # Rendering Helpers
-def _draw_rect(img, x, y, w, h, color):
-    """Draw a filled rectangle. (x, y) is bottom-left corner."""
+# ------------------------------
+
+def _draw_rect(img: np.ndarray, x: float, y: float, w: float, h: float, color: np.ndarray) -> None:
+    """Draw a filled rectangle with bottom-left corner at (x, y)."""
     buffer_size = img.shape[0]
-    
+
+    # Convert from game coordinates (y=0 at bottom) to image coordinates (row=0 at top)
     r0 = int(np.floor(buffer_size - (y + h)))
     r1 = int(np.ceil(buffer_size - y))
     c0 = int(np.floor(x))
     c1 = int(np.ceil(x + w))
 
+    # Clamp to image bounds
     r0 = max(0, min(buffer_size, r0))
     r1 = max(0, min(buffer_size, r1))
     c0 = max(0, min(buffer_size, c0))
@@ -40,13 +49,15 @@ def _draw_rect(img, x, y, w, h, color):
     if r1 > r0 and c1 > c0:
         img[r0:r1, c0:c1] = color
 
-def _draw_circle(img, x, y, r, color):
-    """Draw a filled circle. (x, y) is center."""
+def _draw_circle(img: np.ndarray, x: float, y: float, r: float, color: np.ndarray) -> None:
+    """Draw a filled circle centered at (x, y) with radius r."""
     buffer_size = img.shape[0]
 
+    # Bounding box of circle
     x_min, x_max = int(np.floor(x - r)), int(np.ceil(x + r))
     y_min, y_max = int(np.floor(y - r)), int(np.ceil(y + r))
 
+    # Convert to image coordinates and clamp
     row_min = max(0, int(np.floor(buffer_size - y_max)))
     row_max = min(buffer_size, int(np.ceil(buffer_size - y_min)))
     col_min = max(0, x_min)
@@ -55,20 +66,24 @@ def _draw_circle(img, x, y, r, color):
     if row_max <= row_min or col_max <= col_min:
         return
 
+    # Create coordinate grids for the bounding box
     rows = np.arange(row_min, row_max, dtype=np.float32)
     cols = np.arange(col_min, col_max, dtype=np.float32)
 
+    # Pixel centers in game coordinates
     pixel_x = cols[None, :] + 0.5                     
     pixel_y = (buffer_size - 1 - rows[:, None]) + 0.5   
 
+    # Fill pixels whose centers fall within the circle
     dx = pixel_x - x
     dy = pixel_y - y
     mask = (dx*dx + dy*dy) <= r*r  
 
     img[row_min:row_max, col_min:col_max][mask] = color
 
-def _draw_digit(img, x, y, digit, digit_scale, color, digit_patterns):
-    """Draw a score digit using digit_patterns."""
+def _draw_digit(img: np.ndarray, x: float, y: float, digit: int, 
+                digit_scale: float, color: np.ndarray, digit_patterns: dict) -> None:
+    """Draw a score digit (0-9) at position (x, y) using rectangles from digit_patterns."""
     if digit not in digit_patterns:
         return
     for dx, dy, dw, dh in digit_patterns[digit]:
@@ -79,22 +94,28 @@ def _draw_digit(img, x, y, digit, digit_scale, color, digit_patterns):
                    dh * digit_scale,
                    color)
 
-def _downsample(img, crop_size: int, upscale_factor: int):
-    """Box-downsample high-res buffer to output size."""
+def _downsample(img: np.ndarray, crop_size: int, upscale_factor: int) -> np.ndarray:
+    """Downsample by averaging non-overlapping pixel blocks to a crop_size image."""
     if upscale_factor == 1:
         return np.clip(np.round(img), 0, 255).astype(np.uint8)
     img = img.reshape(crop_size, upscale_factor, crop_size, upscale_factor, 3).mean(axis=(1, 3))
     return np.clip(np.round(img), 0, 255).astype(np.uint8)
 
+# ------------------------------
+# Renderer Class
+# ------------------------------
 
-# Rendering Class
 class Renderer:
-    def __init__(self, settings, display_settings=None):
+    """ Renders Pong game state as object-centric crops or full frames. Each crop is centered on its object, 
+        and includes the previous frame position (in a darker color) to emulate motion blur/anti-aliasing."""
+    
+    def __init__(self, settings: dict, display_settings: dict = None) -> None:
         self.settings = settings
         self.display_settings = display_settings if display_settings is not None else DISPLAY_SETTINGS
-        self._buffer_cache = {}
+        self._buffer_cache = {}   # reuse buffers to avoid allocation
 
-    def _get_buffer(self, buffer_size, idx):
+    def _get_buffer(self, buffer_size: int, idx: int) -> np.ndarray:
+        """Get or create a zeroed rendering buffer from cache."""
         cache_key = (buffer_size, idx)
         
         if cache_key in self._buffer_cache:
@@ -106,14 +127,17 @@ class Renderer:
         buf.fill(0.0)
         return buf
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
+        """Clear the rendering buffer cache."""
         self._buffer_cache.clear()
 
-    def render_crops(self, state, prev_state):
-        """Return (left_paddle, right_paddle, ball, score) crops as uint8 images."""
+    def render_crops(self, state: dict, prev_state: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Render object-centric crops for current state. Returns (left_paddle, right_paddle, ball, score) as uint8 images.
+            Each crop shows the object centered, with previous position drawn behind for motion."""
         crop_size = self.settings["crop_size"]
         upscale_factor = self.settings["upscale_factor"]
 
+        # Render at higher resolution then downsample for anti-aliasing
         buffer_size = crop_size * upscale_factor
         center = buffer_size / 2.0
 
@@ -125,12 +149,14 @@ class Renderer:
         ball_r = self.settings["ball_radius"] * upscale_factor
         digit_scale = self.settings["score_scale"] * upscale_factor
 
+        # Paddle drawn centered in crop
         paddle_x = center - paddle_w / 2
         paddle_y = center - paddle_h / 2
 
-        # Left paddle
+        # Left paddle: draw previous position first (behind), then current position
         left_buffer = self._get_buffer(buffer_size, idx=0)
         if prev_state is not None:
+            # Offset from center based on how much the paddle moved
             paddle_left_y_prev = paddle_y + (prev_state["paddle_left_y"] - state["paddle_left_y"]) * upscale_factor
             _draw_rect(left_buffer, paddle_x, paddle_left_y_prev, paddle_w, paddle_h, colors["paddle_left_prev"])    
         _draw_rect(left_buffer, paddle_x, paddle_y, paddle_w, paddle_h, colors["paddle_left"])
@@ -150,7 +176,7 @@ class Renderer:
             _draw_circle(ball_buffer, ball_x_prev, ball_y_prev, ball_r, colors["ball_prev"])
         _draw_circle(ball_buffer, center, center, ball_r, colors["ball"])
 
-        # Score
+        # Score: left digit, colon, right digit
         score_buffer = self._get_buffer(buffer_size, idx=3)
         _draw_digit(score_buffer, center - 4.5 * digit_scale, center - 2.5 * digit_scale,
                     int(state["score_left"]), digit_scale, colors["score"], digit_patterns)
@@ -166,13 +192,13 @@ class Renderer:
                 _downsample(ball_buffer, crop_size, upscale_factor),
                 _downsample(score_buffer, crop_size, upscale_factor))
 
-    def reconstruct_frame(self, crops, state):
-        """Composite crop images into a full frame."""
+    def reconstruct_frame(self, crops: tuple, state: dict) -> np.ndarray:
+        """Composite object crops into a full game frame."""
         resolution = self.settings["resolution"]
         crop_size = crops[0].shape[0]
         half = crop_size // 2
 
-        # Back to front: score, left paddle, right paddle, ball
+        # Render order (back to front): score, left paddle, right paddle, ball
         z_order = [3, 0, 1, 2]
         positions = [(self.settings["paddle_left_x"], state["paddle_left_y"]),
                      (self.settings["paddle_right_x"], state["paddle_right_y"]),
@@ -184,23 +210,28 @@ class Renderer:
         for i in z_order:
             crop = crops[i]
             x, y = positions[i]
-            
+
+            # Convert game position to frame coordinates
             col_center = int(round(x))
             row_center = int(round(resolution - y))
-            
+
+            # Compute destination region in frame (clamp to bounds)
             dst_r1 = max(0, row_center - half)
             dst_r2 = min(resolution, row_center + half)
             dst_c1 = max(0, col_center - half)
             dst_c2 = min(resolution, col_center + half)
-            
+
+            # Compute corresponding source region in crop
             src_r1 = half - (row_center - dst_r1)
             src_r2 = src_r1 + (dst_r2 - dst_r1)
             src_c1 = half - (col_center - dst_c1)
             src_c2 = src_c1 + (dst_c2 - dst_c1)
-            
+
+            # Copy non-black pixels (black = transparent)
             if dst_r2 > dst_r1 and dst_c2 > dst_c1:
                 src_region = crop[src_r1:src_r2, src_c1:src_c2]
-                mask = src_region.any(axis=-1)
+                mask = src_region.any(axis=-1)    # non-black pixels
                 frame[dst_r1:dst_r2, dst_c1:dst_c2][mask] = src_region[mask]
         
         return frame
+        
