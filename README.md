@@ -30,4 +30,4 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
 - examples/
   - `sim_and_render.py`: Run a Pong simulation and save as an animated GIF.
   - `run_vae_train.py`: Train the Convolutional VAE on ground-truth Pong object masks.
-  - `run_transformer_train.py`: Train the dynamics model transformer on Pong trajectories using a pre-trained (frozen) VAE.
+  - `run_transformer_train.py`: Train the dynamics model transformer on simulated Pong trajectories using a pre-trained (frozen) VAE.
