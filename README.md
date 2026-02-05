@@ -12,7 +12,7 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
 
 [2] Lei, A., Schölkopf, B., & Posner, I. (2025). SPARTAN: A Sparse Transformer World Model Attending to What Matters. The Thirty-Ninth Annual Conference on Neural Information Processing Systems. NIPS. https://openreview.net/forum?id=uS5ch7GjZ4
 
-*TODO: train the dynamics model for a larger number of steps, evaluate it using pixel MSE as a function of rollout length, and run an ablation on the context window size and self-forcing horizon; map keyboard inputs to paddle actions during rollout to make the generated Pong dynamics fully interactive.*
+*TODO: model resets as binary latent variables or via multimodal output head; evaluate models with pixel MSE as a function of rollout length, rollout accuracy as a function of context window (W) and self-forcing horizon (H); add option to map keyboard inputs to paddle actions during rollout.*
 
 ### Repository Contents
 - env/
