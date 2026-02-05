@@ -2,6 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+# ------------------------------
+# Animation Functions
+# ------------------------------
+
 def merge_crops(crops: list[np.ndarray], pad: int = 2) -> np.ndarray:
     """Horizontally concatenate object crops into a single image with padding between them."""
     pad = int(pad)
@@ -48,3 +52,4 @@ def create_animation(frames: list[np.ndarray], fps: int = 24, fig_scale: int = 5
     plt.close(fig)
 
     return anim
+
