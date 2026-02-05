@@ -3,17 +3,22 @@ import torch
 import torch.nn.functional as F
 from pong import Pong
 from render import Renderer
+from vae_model import ObjectVAE
+from transformer_model import Transformer
 
-def collect_buffer(N: int, 
-                   T: int = 300, 
+def collect_buffer(N: int,
+                   T: int = 300,
                    W: int = 1,
                    H: int = 1,
                    seed: int | None = None,
-                   print_every: int = 50):
+                   print_every: int = 50) -> dict:
+    """Collect a replay buffer of N episodes, each with T timesteps. W (context window) and H (self-forcing horizon) 
+       are stored in the buffer for use by sample_batch. Returns dict with crops, positions, and actions."""
     rng = np.random.default_rng(seed)
     env = Pong()
     renderer = Renderer(env.settings)
 
+    # Fixed positions for paddles and score (only y varies for paddles)
     paddle_left_x = env.settings["paddle_left_x"]
     paddle_right_x = env.settings["paddle_right_x"]
     score_center = env.settings["score_center"]
@@ -26,21 +31,24 @@ def collect_buffer(N: int,
 
     for ep in range(N):
         env.reset(seed=int(rng.integers(0, 1_000_000)))
-        env.step(left_action=None, right_action=None)
+        env.step(left_action=None, right_action=None)   # burn-in first period to get valid prev_state
 
         for t in range(T):
+            # Render object crops
             left_t, right_t, ball_t, score_t = renderer.render_crops(state=env.state, prev_state=env.prev_state)
             crops = np.stack([left_t, right_t, ball_t, score_t], axis=0)
-            crops = np.transpose(crops, (0, 3, 1, 2))
+            crops = np.transpose(crops, (0, 3, 1, 2))   # (K, 3, H_img, W_img) for PyTorch convolution
 
+            # Construct object position array and normalize positions from pixels to [-1, 1]
             pos = np.array([[paddle_left_x, env.state["paddle_left_y"]],
                             [paddle_right_x, env.state["paddle_right_y"]],
                             [env.state["ball_x"], env.state["ball_y"]],
                             [score_center[0], score_center[1]]], dtype=np.float32)
             pos = pos / resolution * 2.0 - 1.0
 
-            _, info = env.step(left_action=None, right_action=None)
+            _, info = env.step(left_action=None, right_action=None)   # train on AI-controlled actions
 
+            # Lazy initialization to infer crop shape
             if crops_buf is None:
                 crops_buf = np.empty((N, T) + crops.shape, dtype=np.uint8)
                 pos_buf = np.empty((N, T) + pos.shape, dtype=np.float32)
@@ -53,32 +61,38 @@ def collect_buffer(N: int,
         if ((ep + 1) % print_every) == 0 or ep == 0:
             print("episode:", ep + 1)
 
-    buffer = {"crops": crops_buf,           # (N, T, K, 3, H_img, W_img) uint8
-              "pos": pos_buf,               # (N, T, K, 2)
-              "left_a": left_a_buf,         # (N, T)
-              "right_a": right_a_buf,       # (N, T)
-              "W": W,
-              "H": H}
+    buffer = {"crops": crops_buf,      # (N, T, K, 3, H_img, W_img) uint8
+              "pos": pos_buf,          # (N, T, K, 2) float32, normalized to [-1, 1]
+              "left_a": left_a_buf,    # (N, T) int32
+              "right_a": right_a_buf,  # (N, T) int32
+              "W": W,                  # context window size
+              "H": H}                  # prediction horizon
+                     
     return buffer
 
 
-def sample_batch(buffer: dict, batch_size: int, seed: int | None = None):
+def sample_batch(buffer: dict, batch_size: int, seed: int | None = None) -> dict:
+    """Sample a batch of (context window, self-forcing horizon) pairs from the buffer.
+       For each sample, selects a random episode and timestep tp1, then returns:
+          - Window: frames [tp1-W, ..., tp1-1] (context for prediction)
+          - Horizon: frames [tp1, ..., tp1+H-1] (targets for autoregressive prediction)"""
     rng = np.random.default_rng(seed)
     W = buffer["W"]
     H = buffer["H"]
     N, T = buffer["crops"].shape[:2]
     B = int(batch_size)
 
-    # Valid tp1 range: [W, T-H]
+    # Valid tp1 range [W, T-H] ensures both window and horizon fit within episode
     valid_tp1 = np.arange(W, T - H + 1)
     n_valid_per_ep = len(valid_tp1)
     n_total = N * n_valid_per_ep
 
+    # Sample flat indices and convert to (episode, timestep) pairs
     flat_idx = rng.integers(0, n_total, size=B)
     ep_idx = (flat_idx // n_valid_per_ep).astype(np.int32)
     tp1_idx = (flat_idx % n_valid_per_ep + W).astype(np.int32)
 
-    # Window: [tp1-W, ..., tp1-1]
+    # Context window: [tp1-W, ..., tp1-1]
     window_offsets = np.arange(-W, 0)
     t_windows = tp1_idx[:, None] + window_offsets
 
@@ -87,7 +101,7 @@ def sample_batch(buffer: dict, batch_size: int, seed: int | None = None):
     left_a_win = buffer["left_a"][ep_idx[:, None], t_windows]
     right_a_win = buffer["right_a"][ep_idx[:, None], t_windows]
 
-    # Horizon: [tp1, tp1+1, ..., tp1+H-1]
+    # Prediction horizon: [tp1, tp1+1, ..., tp1+H-1]
     hor_offsets = np.arange(H)
     t_hor = tp1_idx[:, None] + hor_offsets
 
@@ -96,22 +110,23 @@ def sample_batch(buffer: dict, batch_size: int, seed: int | None = None):
     left_a_hor = buffer["left_a"][ep_idx[:, None], t_hor]
     right_a_hor = buffer["right_a"][ep_idx[:, None], t_hor]
 
-    batch = {"crops_win": crops_win,
-             "pos_win": pos_win,
-             "left_a_win": left_a_win,
-             "right_a_win": right_a_win,
-             "crops_hor": crops_hor,
-             "pos_hor": pos_hor,
-             "left_a_hor": left_a_hor,
-             "right_a_hor": right_a_hor,
+    batch = {"crops_win": crops_win,      # (B, W, K, 3, H_img, W_img)
+             "pos_win": pos_win,          # (B, W, K, 2)
+             "left_a_win": left_a_win,    # (B, W)
+             "right_a_win": right_a_win,  # (B, W)
+             "crops_hor": crops_hor,      # (B, H, K, 3, H_img, W_img)
+             "pos_hor": pos_hor,          # (B, H, K, 2)
+             "left_a_hor": left_a_hor,    # (B, H)
+             "right_a_hor": right_a_hor,  # (B, H)
              "ep_idx": ep_idx,
              "tp1_idx": tp1_idx}
+  
     return batch
 
 
-def train_transformer(vae,
-                      transformer,
-                      buffer,
+def train_transformer(vae: ObjectVAE,
+                      transformer: Transformer,
+                      buffer: dict,
                       num_steps: int = 3000,
                       batch_size: int = 64,
                       lr: float = 3e-4,
@@ -119,8 +134,10 @@ def train_transformer(vae,
                       clip_grad_norm: float = 1.0,
                       gamma: float = 0.975,
                       print_every: int = 100,
-                      save_path = None):
-
+                      save_path: str | None = None) -> tuple[Transformer, dict]:
+    """Train the transformer dynamics model with self-forcing (autoregressive rollout loss).
+       At each step, predicts H future frames by feeding predictions back as input. Loss is MSE on latents and positions, 
+       with exponential decay (gamma^h) over the horizon to stabilize gradients."""
     device = next(transformer.parameters()).device
     H = buffer["H"]
 
@@ -133,21 +150,22 @@ def train_transformer(vae,
     optimizer = torch.optim.Adam(transformer.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps, eta_min=lr/10)
 
+    training_log = {'total_loss': [], 'lat_loss': [], 'pos_loss': [], 'lr': []}
+                        
     for step in range(1, num_steps + 1):
-
-        # Sample batch
         batch_np = sample_batch(buffer=buffer, batch_size=batch_size)
 
-        crops_win = torch.from_numpy(batch_np["crops_win"]).to(device)             # (B, W, K, C, H_img, W_img)
-        crops_hor = torch.from_numpy(batch_np["crops_hor"]).to(device)             # (B, H, K, C, H_img, W_img)
-        pos_win = torch.from_numpy(batch_np["pos_win"]).to(device)                 # (B, W, K, 2)
-        pos_hor = torch.from_numpy(batch_np["pos_hor"]).to(device)                 # (B, H, K, 2)
-        left_a_win = torch.from_numpy(batch_np["left_a_win"]).long().to(device)    # (B, W)
-        right_a_win = torch.from_numpy(batch_np["right_a_win"]).long().to(device)  # (B, W)
-        left_a_hor = torch.from_numpy(batch_np["left_a_hor"]).long().to(device)    # (B, H)
-        right_a_hor = torch.from_numpy(batch_np["right_a_hor"]).long().to(device)  # (B, H)
-
-        # VAE: encode crops
+        # Move batch arrays to device
+        crops_win = torch.from_numpy(batch_np["crops_win"]).to(device) 
+        crops_hor = torch.from_numpy(batch_np["crops_hor"]).to(device)         
+        pos_win = torch.from_numpy(batch_np["pos_win"]).to(device)                 
+        pos_hor = torch.from_numpy(batch_np["pos_hor"]).to(device)                 
+        left_a_win = torch.from_numpy(batch_np["left_a_win"]).long().to(device)    
+        right_a_win = torch.from_numpy(batch_np["right_a_win"]).long().to(device)  
+        left_a_hor = torch.from_numpy(batch_np["left_a_hor"]).long().to(device)    
+        right_a_hor = torch.from_numpy(batch_np["right_a_hor"]).long().to(device)  
+      
+        # Encode crops to latents using frozen VAE
         B, W, K = crops_win.shape[:3]
         flat_win = crops_win.view(B*W*K, *crops_win.shape[3:])
         flat_hor = crops_hor.view(B*H*K, *crops_hor.shape[3:])
@@ -159,7 +177,7 @@ def train_transformer(vae,
             mu_hor, _ = vae.encode(flat_hor)
             latents_hor = mu_hor.view(B, H, K, -1)   
 
-        # Autoregressive rollout loss
+        # Autoregressive rollout over prediction horizon
         loss_lat = 0.0
         loss_pos = 0.0
 
@@ -169,17 +187,20 @@ def train_transformer(vae,
                               left_actions=left_a_win,
                               right_actions=right_a_win)
 
+            # Predict next step from last position in context
             pred_latents = out["pred_latents"][:, -1]    
             pred_pos = out["pred_pos"][:, -1]            
 
+            # Ground truth for this horizon step
             target_latents = latents_hor[:, h]       
             target_pos = pos_hor[:, h]              
 
+            # Exponentially decaying loss weight over horizon
             weight = gamma ** h     # gamma^0 = 1 for h=0
             loss_lat = loss_lat + weight * F.mse_loss(pred_latents, target_latents)
             loss_pos = loss_pos + weight * F.mse_loss(pred_pos, target_pos)
 
-            # Self-forcing: drop oldest, append prediction
+            # Self-forcing: slide window forward, append prediction as new context
             latents_win = torch.cat([latents_win[:, 1:], pred_latents.unsqueeze(1)], dim=1)
             pos_win = torch.cat([pos_win[:, 1:], pred_pos.unsqueeze(1)], dim=1)
             left_a_win = torch.cat([left_a_win[:, 1:], left_a_hor[:, h:h+1]], dim=1)
@@ -196,12 +217,18 @@ def train_transformer(vae,
         optimizer.step()
         scheduler.step()
 
+        training_log['total_loss'].append(loss.item())
+        training_log['lat_loss'].append(loss_lat.item())
+        training_log['pos_loss'].append(loss_pos.item())
+        training_log['lr'].append(scheduler.get_last_lr()[0])
+
         if (step % print_every) == 0 or step == 1:
             current_lr = scheduler.get_last_lr()[0]
-            print(f"step {step:5d} | loss {loss.item():.6f} | lat {loss_lat.item():.6f} | pos {loss_pos.item():.6f} | lr {current_lr:.2e}")
+            print(f"step {step:5d} | loss {loss.item():.6f} | lat {loss_lat.item():.6f} | "
+                  f"pos {loss_pos.item():.6f} | lr {current_lr:.2e}")
 
     if save_path:
         torch.save(transformer.state_dict(), save_path)
 
-    return transformer
+    return transformer, training_log
                         
