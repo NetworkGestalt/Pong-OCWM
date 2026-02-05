@@ -1,14 +1,13 @@
 from vae_train import train_vae
 
 if __name__ == "__main__":
-    vae, history = train_vae(num_steps=3000,
-                             batch_size=64,
-                             latent_dim=32,
-                             crop_size=20,
-                             target_kl_weight=1.0,
-                             ramp_proportion=0.8,
-                             lr=1e-3,
-                             save_path="pong_vae.pth")
+    vae, training_log = train_vae(num_steps=3000,
+                                  batch_size=64,
+                                  latent_dim=32,
+                                  target_kl_weight=1.0,
+                                  ramp_proportion=0.8,
+                                  lr=1e-3,
+                                  save_path="pong_vae.pth")
 
     # To load trained model:
     # import torch
