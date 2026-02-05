@@ -7,7 +7,7 @@ from render import Renderer
 from vae_model import ObjectVAE
 
 # ------------------------------
-# Training Data Collector
+# VAE Training Data Collector
 # ------------------------------
 
 def vae_data_loader(env: Pong, renderer: Renderer, batch_size: int) -> np.ndarray:
@@ -115,3 +115,4 @@ def train_vae(num_steps: int = 3000,
     
     return vae, training_log
                   
+
