@@ -33,19 +33,18 @@ if __name__ == "__main__":
                               d_model=d_model,
                               latent_dim=latent_dim,
                               max_seq_len=W + H).to(device)
-
     # Train
-    transformer = train_transformer(vae=vae,
-                                    transformer=transformer,
-                                    buffer=buffer,
-                                    num_steps=4000,
-                                    batch_size=64,
-                                    lr=3e-4,
-                                    pos_loss_weight=1.0,
-                                    clip_grad_norm=1.0,
-                                    gamma=0.975,
-                                    print_every=100,
-                                    save_path="pong_transformer.pth")
+    transformer, training_log = train_transformer(vae=vae,
+                                                  transformer=transformer,
+                                                  buffer=buffer,
+                                                  num_steps=4000,
+                                                  batch_size=64,
+                                                  lr=3e-4,
+                                                  pos_loss_weight=1.0,
+                                                  clip_grad_norm=1.0,
+                                                  gamma=0.975,
+                                                  print_every=100,
+                                                  save_path="pong_transformer.pth")
 
     # To load trained model:
     # tokenizer = ObjectTokenizer(vae_latent_dim=32, pos_dim=2, n_actions=3, d_model=256).to(device)
