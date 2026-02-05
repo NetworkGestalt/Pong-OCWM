@@ -1,18 +1,23 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch import Tensor
 from pong import Pong
 from render import Renderer
 from vae_model import ObjectVAE
 
-# Training Data Loader
-def vae_data_loader(env, renderer, batch_size): 
-    """Generate random Pong frames and extract object crops."""
+# ------------------------------
+# Training Data Collector
+# ------------------------------
+
+def vae_data_loader(env: Pong, renderer: Renderer, batch_size: int) -> np.ndarray:
+    """Generate random Pong frames and extract object crops for VAE training.
+        Returns crops as (B, K, 3, H, W) float32 array normalized to [0, 1]."""
     all_crops = []
     
     for _ in range(batch_size):
         env.reset(seed=np.random.randint(1_000_000))
-        env.step(left_action=None, right_action=None)
+        env.step(left_action=None, right_action=None)   # burn-in one step to get a valid prev_state
     
         left, right, ball, score = renderer.render_crops(state=env.state, prev_state=env.prev_state)
         crops = np.stack([left, right, ball, score], axis=0)    # (K, H, W, 3)
@@ -20,24 +25,34 @@ def vae_data_loader(env, renderer, batch_size):
         all_crops.append(crops)
 
     crops = np.stack(all_crops, axis=0)                         # (B, K, H, W, 3)
-    crops = np.transpose(crops, (0, 1, 4, 2, 3))                # (B, K, 3, H, W)
+    crops = np.transpose(crops, (0, 1, 4, 2, 3))                # (B, K, 3, H, W) for PyTorch convolutions
 
     return crops
-    
 
+# ------------------------------
 # Loss Function
-def bce_loss_logits(recon_logits, x, mu, logvar, kl_weight=1.0):
+# ------------------------------
+
+def bce_loss_logits(recon_logits: Tensor, x: Tensor, mu: Tensor, logvar: Tensor, kl_weight: float = 1.0
+                   ) -> tuple[Tensor, Tensor, Tensor]:
+    """Compute VAE loss: reconstruction + KL divergence. Uses BCE for reconstruction 
+        due to the bit-like appearance of Pong objects (found to work better than MSE)."""
+   
+    # Reconstruction loss: binary cross-entropy (averaged over batch)
     recon_loss = F.binary_cross_entropy_with_logits(recon_logits, x, reduction='sum') / x.size(0)
-    
-    kl_div = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=1).mean()
-    loss = recon_loss + (kl_weight * kl_div)
-    
-    return loss, recon_loss, kl_div
 
+    # Closed-form KL divergence of q(z|x) from a Gaussian prior (mode-seeking)
+    kl_div_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=1).mean()
+    loss = recon_loss + (kl_weight * kl_div_loss)
+    
+    return loss, recon_loss, kl_div_loss
 
+# ------------------------------
 # KL Annealing Schedule
-def linear_warmup(step, total_steps, target_beta, ramp_proportion=0.75):
-    """Ramps from 0 to target_beta over the first ramp_proportion of training."""
+# ------------------------------
+
+def linear_warmup(step: int, total_steps: int, target_beta: float, ramp_proportion: float = 0.75) -> float:
+    """Linearly ramp KL weight from 0 to target_beta over the first ramp_proportion of training."""
     ramp_steps = int(total_steps * ramp_proportion)
     
     if step < ramp_steps:
@@ -45,44 +60,50 @@ def linear_warmup(step, total_steps, target_beta, ramp_proportion=0.75):
     else:
         return target_beta
 
-
+# ------------------------------
 # VAE Training Loop
-def train_vae(num_steps=3000, 
-              batch_size=64, 
-              latent_dim=32, 
-              target_kl_weight=1.0, 
-              ramp_proportion=0.8, 
-              lr=1e-3, 
-              save_path=None):
+# ------------------------------
+
+def train_vae(num_steps: int = 3000,
+              batch_size: int = 64,
+              latent_dim: int = 32,
+              target_kl_weight: float = 1.0,
+              ramp_proportion: float = 0.8,
+              lr: float = 1e-3,
+              save_path: str = None) -> tuple[ObjectVAE, dict]:
+    """Train VAE on randomly generated Pong object crops with KL annealing"""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                  
     env = Pong()
     renderer = Renderer(env.settings)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                  
     vae = ObjectVAE(latent_dim=latent_dim).to(device)
-    optimizer = optim.Adam(vae.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(vae.parameters(), lr=lr)
     
-    history = {'total_loss': [], 'recon_loss': [], 'kl_loss': [], 'kl_weight': []}
+    training_log = {'total_loss': [], 'recon_loss': [], 'kl_loss': [], 'kl_weight': []}
     
     vae.train()
-    
     for step in range(1, num_steps + 1):
-
-        crops, _ = vae_data_loader(env, renderer, batch_size=batch_size)        
+        crops = vae_data_loader(env, renderer, batch_size=batch_size)        
         B, K, C, H, W = crops.shape
         crops_flat = torch.from_numpy(crops).reshape(B*K, C, H, W).to(device)
-        
+
+        # Forward pass
         recon_logits, mu, logvar = vae(crops_flat)
-        
+
+        # Compute loss with annealed KL weight
         kl_weight = linear_warmup(step, num_steps, target_kl_weight, ramp_proportion)
         loss, rec_loss, kl_loss = bce_loss_logits(recon_logits, crops_flat, mu, logvar, kl_weight)
-                
+
+        # Backward pass
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         
-        history['total_loss'].append(loss.item())
-        history['recon_loss'].append(rec_loss.item())
-        history['kl_loss'].append(kl_loss.item())
-        history['kl_weight'].append(kl_weight)
+        training_log['total_loss'].append(loss.item())
+        training_log['recon_loss'].append(rec_loss.item())
+        training_log['kl_loss'].append(kl_loss.item())
+        training_log['kl_weight'].append(kl_weight)
         
         if step % 10 == 0 or step == 1:
             print(f"Step {step:4d} | Loss: {loss.item():.3f} | "
@@ -92,4 +113,5 @@ def train_vae(num_steps=3000,
     if save_path:
         torch.save(vae.state_dict(), save_path)
     
-    return vae, history
+    return vae, training_log
+                  
