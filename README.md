@@ -16,18 +16,18 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
 
 ### Repository Contents
 - env/
-  - `pong.py`: Pong game simulation with configurable physics and AI-controlled paddles. The AI controller of either paddle can be overridden by user-defined actions {-1: "down", 0: "still", 1: "up"}, making it suitable for interactive rollouts or multi-agent reinforcement learning. 
+  - `pong.py`: Pong simulation with configurable physics. AI-controlled paddles can be overridden with user actions {-1: down, 0: still, 1: up}.
 - render/
-  - `render.py`: Rendering utilities to generate ground-truth object crops from game state and reconstruct full-game frames from crops and positions.
-  - `animate.py`: Animation utilities for visualizing object crops and reconstructed full-game frames.
+  - `render.py`: Generate ground-truth object crops from game state and reconstruct full frames from crops and positions.
+  - `animate.py`: Animation utilities for object crops and reconstructed frames.
 - models/
   - `vae_model.py`: Convolutional Variational Autoencoder (C-VAE) for encoding object crops into a latent space.
-  - `transformer_model.py`: Spatiotemporal Transformer that predicts latent object dynamics using inter-object attention, causal temporal attention, and RoPE positional encoding.
+  - `transformer_model.py`: Spatiotemporal transformer for predicting latent dynamics using inter-object attention, causal temporal attention, and RoPE.
 - train/
-  - `vae_train.py`: Utilities for collecting VAE training data, computing BCE loss, and running the training loop.
-  - `transformer_train.py`: 
+  - `vae_train.py`: Data collection, BCE loss computation, and training loop for the VAE.
+  - `transformer_train.py`: Data collection, batch sampling, and autoregressive training loop for the transformer.
 - eval (WIP)/
 - examples/
-  - `sim_and_render.py`: Run a Pong simulation and save as an animated GIF.
-  - `run_vae_train.py`: Train the Convolutional VAE on ground-truth Pong object masks.
-  - `run_transformer_train.py`: Train the dynamics model transformer on simulated Pong trajectories using a pre-trained (frozen) VAE.
+  - `sim_and_render.py`: Run a Pong simulation and save as GIF.
+  - `run_vae_train.py`: Train the VAE on ground-truth object crops.
+  - `run_transformer_train.py`: Train the transformer on Pong trajectories using a frozen VAE.
