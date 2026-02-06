@@ -24,8 +24,9 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
   - `vae_model.py`: Convolutional Variational Autoencoder (C-VAE) for encoding object crops into a latent space.
   - `transformer_model.py`: Spatiotemporal transformer for predicting latent dynamics using inter-object attention, causal temporal attention, and RoPE.
 - train/
-  - `vae_train.py`: Data collection, BCE loss computation, and training loop for the VAE.
-  - `transformer_train.py`: Data collection, batch sampling, and autoregressive training loop for the transformer.
+  - `data_loader.py`: Collect the training data buffer used for both VAE and transformer model. 
+  - `vae_train.py`: Batch sampler, BCE loss computation, and training loop for the VAE.
+  - `transformer_train.py`: Batch sampler and autoregressive training loop for the transformer.
 - eval (WIP)/
 - examples/
   - `sim_and_render.py`: Run a Pong simulation and save as GIF.
