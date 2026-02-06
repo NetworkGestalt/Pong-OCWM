@@ -1,7 +1,8 @@
+import numpy as np
 import torch
 from vae_model import ObjectVAE
 from transformer_model import Transformer, ObjectTokenizer
-from transformer_train import collect_buffer, train_transformer
+from transformer_train import train_transformer
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -11,12 +12,12 @@ if __name__ == "__main__":
     vae.load_state_dict(torch.load("pong_vae.pth", map_location=device, weights_only=True))
     vae.eval()
 
-    # Collect training data
-    W = 16    # causal context window length
-    H = 8     # self-forcing (rollout loss) horizon
-    buffer = collect_buffer(N=512, T=256, W=W, H=H, print_every=50)
+    # Load pre-collected buffer
+    buffer = dict(np.load("pong_buffer.npz"))
 
     # Initialize transformer
+    W = 16
+    H = 8
     d_model = 256
     n_layers = 4
     n_heads = 4
@@ -33,10 +34,12 @@ if __name__ == "__main__":
                               d_model=d_model,
                               latent_dim=latent_dim,
                               max_seq_len=W + H).to(device)
-    # Train
+
     transformer, training_log = train_transformer(vae=vae,
                                                   transformer=transformer,
                                                   buffer=buffer,
+                                                  W=W,
+                                                  H=H,
                                                   num_steps=4000,
                                                   batch_size=64,
                                                   lr=3e-4,

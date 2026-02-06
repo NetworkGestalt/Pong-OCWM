@@ -1,11 +1,15 @@
 from vae_train import train_vae
+import numpy as np
 
 if __name__ == "__main__":
-    vae, training_log = train_vae(num_steps=3000,
+    buffer = dict(np.load("pong_buffer.npz"))
+
+    vae, training_log = train_vae(buffer=buffer,
+                                  num_steps=3000,
                                   batch_size=64,
                                   latent_dim=32,
                                   target_kl_weight=1.0,
-                                  ramp_proportion=0.8,
+                                  ramp_proportion=0.75,
                                   lr=1e-3,
                                   save_path="pong_vae.pth")
 

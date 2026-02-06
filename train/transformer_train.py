@@ -1,84 +1,20 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-from pong import Pong
-from render import Renderer
 from vae_model import ObjectVAE
 from transformer_model import Transformer
 
-def collect_buffer(N: int,
-                   T: int = 300,
-                   W: int = 1,
-                   H: int = 1,
-                   seed: int | None = None,
-                   print_every: int = 50) -> dict:
-    """Collect a replay buffer of N episodes, each with T timesteps. W (context window) and H (self-forcing horizon) 
-       are stored in the buffer for use by sample_batch. Returns dict with crops, positions, and actions."""
-    rng = np.random.default_rng(seed)
-    env = Pong()
-    renderer = Renderer(env.settings)
+# ------------------------------
+# Transformer Batch Sampler
+# ------------------------------
 
-    # Fixed positions for paddles and score (only y varies for paddles)
-    paddle_left_x = env.settings["paddle_left_x"]
-    paddle_right_x = env.settings["paddle_right_x"]
-    score_center = env.settings["score_center"]
-    resolution = env.settings["resolution"]
-
-    crops_buf = None
-    pos_buf = None
-    left_a_buf = np.empty((N, T), dtype=np.int32)
-    right_a_buf = np.empty((N, T), dtype=np.int32)
-
-    for ep in range(N):
-        env.reset(seed=int(rng.integers(0, 1_000_000)))
-        env.step(left_action=None, right_action=None)   # burn-in first period to get valid prev_state
-
-        for t in range(T):
-            # Render object crops
-            left_t, right_t, ball_t, score_t = renderer.render_crops(state=env.state, prev_state=env.prev_state)
-            crops = np.stack([left_t, right_t, ball_t, score_t], axis=0)
-            crops = np.transpose(crops, (0, 3, 1, 2))   # (K, 3, H_img, W_img) for PyTorch convolution
-
-            # Construct object position array and normalize positions from pixels to [-1, 1]
-            pos = np.array([[paddle_left_x, env.state["paddle_left_y"]],
-                            [paddle_right_x, env.state["paddle_right_y"]],
-                            [env.state["ball_x"], env.state["ball_y"]],
-                            [score_center[0], score_center[1]]], dtype=np.float32)
-            pos = pos / resolution * 2.0 - 1.0
-
-            _, info = env.step(left_action=None, right_action=None)   # train on AI-controlled actions
-
-            # Lazy initialization to infer crop shape
-            if crops_buf is None:
-                crops_buf = np.empty((N, T) + crops.shape, dtype=np.uint8)
-                pos_buf = np.empty((N, T) + pos.shape, dtype=np.float32)
-
-            crops_buf[ep, t] = crops
-            pos_buf[ep, t] = pos
-            left_a_buf[ep, t] = int(info["left_action"])
-            right_a_buf[ep, t] = int(info["right_action"])
-
-        if ((ep + 1) % print_every) == 0 or ep == 0:
-            print("episode:", ep + 1)
-
-    buffer = {"crops": crops_buf,      # (N, T, K, 3, H_img, W_img) uint8
-              "pos": pos_buf,          # (N, T, K, 2) float32, normalized to [-1, 1]
-              "left_a": left_a_buf,    # (N, T) int32
-              "right_a": right_a_buf,  # (N, T) int32
-              "W": W,                  # context window size
-              "H": H}                  # prediction horizon
-                     
-    return buffer
-
-
-def sample_batch(buffer: dict, batch_size: int, seed: int | None = None) -> dict:
+def sample_transformer_batch(buffer: dict, batch_size: int, W: int = 16, H: int = 8,
+                             seed: int | None = None) -> dict:
     """Sample a batch of (context window, self-forcing horizon) pairs from the buffer.
        For each sample, selects a random episode and timestep tp1, then returns:
           - Window: frames [tp1-W, ..., tp1-1] (context for prediction)
           - Horizon: frames [tp1, ..., tp1+H-1] (targets for autoregressive prediction)"""
     rng = np.random.default_rng(seed)
-    W = buffer["W"]
-    H = buffer["H"]
     N, T = buffer["crops"].shape[:2]
     B = int(batch_size)
 
@@ -120,13 +56,18 @@ def sample_batch(buffer: dict, batch_size: int, seed: int | None = None) -> dict
              "right_a_hor": right_a_hor,  # (B, H)
              "ep_idx": ep_idx,
              "tp1_idx": tp1_idx}
-  
+
     return batch
 
+# ------------------------------
+# Transformer Training Loop
+# ------------------------------
 
 def train_transformer(vae: ObjectVAE,
                       transformer: Transformer,
                       buffer: dict,
+                      W: int = 16,
+                      H: int = 8,
                       num_steps: int = 3000,
                       batch_size: int = 64,
                       lr: float = 3e-4,
@@ -137,7 +78,7 @@ def train_transformer(vae: ObjectVAE,
                       save_path: str | None = None) -> tuple[Transformer, dict]:
     """Train the transformer dynamics model with self-forcing (autoregressive rollout loss).
        At each step, predicts H future frames by feeding predictions back as input. Loss is MSE on latents and positions, 
-       with exponential decay (gamma^h) over the horizon to stabilize gradients."""
+       with exponential decay (gamma^h) over the horizon to help stabilize gradients."""
     device = next(transformer.parameters()).device
     H = buffer["H"]
 
@@ -153,7 +94,7 @@ def train_transformer(vae: ObjectVAE,
     training_log = {'total_loss': [], 'lat_loss': [], 'pos_loss': [], 'lr': []}
                         
     for step in range(1, num_steps + 1):
-        batch_np = sample_batch(buffer=buffer, batch_size=batch_size)
+        batch_np = sample_transformer_batch(buffer=buffer, batch_size=batch_size, W=W, H=H)
 
         # Move batch arrays to device
         crops_win = torch.from_numpy(batch_np["crops_win"]).to(device) 

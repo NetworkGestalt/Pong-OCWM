@@ -2,32 +2,20 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from pong import Pong
-from render import Renderer
 from vae_model import ObjectVAE
 
 # ------------------------------
-# VAE Training Data Collector
+# VAE Batch Sampler
 # ------------------------------
 
-def vae_data_loader(env: Pong, renderer: Renderer, batch_size: int) -> np.ndarray:
-    """Generate random Pong frames and extract object crops for VAE training.
-        Returns crops as (B, K, 3, H, W) float32 array normalized to [0, 1]."""
-    all_crops = []
-    
-    for _ in range(batch_size):
-        env.reset(seed=np.random.randint(1_000_000))
-        env.step(left_action=None, right_action=None)   # burn-in one step to get a valid prev_state
-    
-        left, right, ball, score = renderer.render_crops(state=env.state, prev_state=env.prev_state)
-        crops = np.stack([left, right, ball, score], axis=0)    # (K, H, W, 3)
-        crops = crops.astype(np.float32) / 255.0
-        all_crops.append(crops)
-
-    crops = np.stack(all_crops, axis=0)                         # (B, K, H, W, 3)
-    crops = np.transpose(crops, (0, 1, 4, 2, 3))                # (B, K, 3, H, W) for PyTorch convolutions
-
-    return crops
+def sample_vae_batch(buffer: dict, batch_size: int) -> np.ndarray:
+    """Sample random frames from the buffer for VAE training. 
+       Returns crops as (B, K, 3, H, W) float32 array normalized to [0, 1]."""
+    N, T = buffer["crops"].shape[:2]
+    ep_idx = np.random.randint(0, N, size=batch_size)
+    t_idx = np.random.randint(0, T, size=batch_size)
+    crops = buffer["crops"][ep_idx, t_idx]        # (B, K, 3, H, W) uint8
+    return crops.astype(np.float32) / 255.0
 
 # ------------------------------
 # Loss Function
@@ -64,19 +52,17 @@ def linear_warmup(step: int, total_steps: int, target_beta: float, ramp_proporti
 # VAE Training Loop
 # ------------------------------
 
-def train_vae(num_steps: int = 3000,
+def train_vae(buffer: dict,
+              num_steps: int = 3000,
               batch_size: int = 64,
               latent_dim: int = 32,
               target_kl_weight: float = 1.0,
-              ramp_proportion: float = 0.8,
+              ramp_proportion: float = 0.75,
               lr: float = 1e-3,
               save_path: str = None) -> tuple[ObjectVAE, dict]:
-    """Train VAE on randomly generated Pong object crops with KL annealing"""
+    """Train VAE on randomly sampled object crops with KL annealing"""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                  
-    env = Pong()
-    renderer = Renderer(env.settings)
-                  
+                                    
     vae = ObjectVAE(latent_dim=latent_dim).to(device)
     optimizer = torch.optim.Adam(vae.parameters(), lr=lr)
     
@@ -84,7 +70,7 @@ def train_vae(num_steps: int = 3000,
     
     vae.train()
     for step in range(1, num_steps + 1):
-        crops = vae_data_loader(env, renderer, batch_size=batch_size)        
+        crops = sample_vae_batch(buffer=buffer, batch_size=batch_size)        
         B, K, C, H, W = crops.shape
         crops_flat = torch.from_numpy(crops).reshape(B*K, C, H, W).to(device)
 
@@ -114,5 +100,3 @@ def train_vae(num_steps: int = 3000,
         torch.save(vae.state_dict(), save_path)
     
     return vae, training_log
-                  
-
