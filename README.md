@@ -27,7 +27,7 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
   - `data_loader.py`: Collect the training data buffer used for both VAE and transformer model. 
   - `vae_train.py`: Batch sampler, BCE loss computation, and training loop for the VAE.
   - `transformer_train.py`: Batch sampler and autoregressive training loop for the transformer.
-- eval (WIP)/
+- eval/ (WIP)
 - examples/
   - `sim_and_render.py`: Run a Pong simulation and save as GIF.
   - `run_vae_train.py`: Train the VAE on ground-truth object crops.
