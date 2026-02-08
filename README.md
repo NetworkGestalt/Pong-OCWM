@@ -1,5 +1,7 @@
 ## Pong-OCWM
 
+*TODO: treat model resets (scoring) as a binary latent variable that the dynamics head conditions on; evaluate models using pixel MSE vs. rollout length, and rollout accuracy vs. context window (W) and self-forcing horizon (H); add an option to map keyboard inputs to paddle actions during rollout.*
+
 <img src="assets/object_encoder.gif" height="215" /> &nbsp;&nbsp;&nbsp;&nbsp; <img src="assets/dynamics_pred.gif" height="215" /> 
 
 ### Description
@@ -11,8 +13,6 @@ The code for our Pong environment is based on the CITRIS Interventional Pong dat
 [1] Lippe, P., Magliacane, S., Löwe, S., Asano, Y. M., Cohen, T., & Gavves, S. (2022). CITRIS: Causal Identifiability from Temporal Intervened Sequences. Proceedings of the 39th International Conference on Machine Learning (Vol. 162, pp. 13557–13603). PMLR. https://proceedings.mlr.press/v162/lippe22a.html
 
 [2] Lei, A., Schölkopf, B., & Posner, I. (2025). SPARTAN: A Sparse Transformer World Model Attending to What Matters. The Thirty-Ninth Annual Conference on Neural Information Processing Systems. NIPS. https://openreview.net/forum?id=uS5ch7GjZ4
-
-*TODO: model resets as binary latent variables or via multimodal output head; evaluate models with pixel MSE as a function of rollout length, rollout accuracy as a function of context window (W) and self-forcing horizon (H); add option to map keyboard inputs to paddle actions during rollout.*
 
 ### Repository Contents
 - env/
