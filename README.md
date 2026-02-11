@@ -1,6 +1,6 @@
 ## Pong-OCWM
 
-*TODO: model resets (scoring) as a binary latent variable that the dynamics head conditions on; evaluate models using pixel MSE vs. rollout length, and rollout accuracy vs. context window (W) and self-forcing horizon (H); add an option to map keyboard inputs to paddle actions during rollout.*
+*TODO: implement Grouped Discrete Representations (GDR) to improve autoreggressive rollouts with hybrid (continuous/discrete) dynamics; evaluate models using pixel MSE vs. rollout length, and rollout accuracy vs. context window (W) and self-forcing horizon (H); add an option to map keyboard inputs to paddle actions during rollout*
 
 <img src="assets/object_encoder.gif" height="215" /> &nbsp;&nbsp;&nbsp;&nbsp; <img src="assets/dynamics_pred.gif" height="215" /> 
 
